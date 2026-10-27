@@ -1,0 +1,520 @@
+{
+  "folders": [
+    {
+      "name": "Robot Learning",
+      "color": "mist",
+      "notes": [
+        {
+          "text": "Sim-to-real gap on the arm\nPolicy hits 92% in sim, 41% on hardware. Suspects:\n- gripper friction way off (sim 1.0, real feels ~0.6)\n- camera latency ~80ms not modeled\n- table height off by 1-2 cm\nTry: randomize friction 0.4-1.2, add 2-4 frame obs delay.",
+          "daysAgo": 2
+        },
+        {
+          "text": "PPO lr 3e-4",
+          "daysAgo": 5
+        },
+        {
+          "text": "Domain rand ranges v3\nmass +-20%\nfriction 0.4-1.2\nmotor gain +-15%\nlight intensity 0.5-1.5x\ntexture swap every episode\ncamera pose +-3cm, +-5deg",
+          "daysAgo": 8
+        },
+        {
+          "text": "order spare Dynamixel horns",
+          "daysAgo": 3
+        },
+        {
+          "text": "Run 0412 notes\n4096 envs, 2.1B steps, reward plateaued at 18h. Entropy collapsed early, try decaying ent_coef 0.01 -> 0.005 instead of fixed. Value loss spikes every ~200 iters, maybe clip range too wide.",
+          "daysAgo": 1
+        },
+        {
+          "text": "Wrist cam remount\nnew bracket from the lab printer, 30deg tilt. Recalibrate extrinsics after.",
+          "daysAgo": 22
+        },
+        {
+          "text": "actuator net for knee joint?",
+          "daysAgo": 35
+        },
+        {
+          "text": "Reading group: legged sim-to-real\nTakeaways from the paper we read Thursday:\n- teacher trained with privileged terrain info, then distilled to a student that only sees proprioception + history\n- student infers terrain from ~50 steps of joint history, basically online system ID\n- randomizing motor strength and latency mattered more than terrain variety\n- no real-world fine-tuning at all\nFor us: would a history encoder help the arm when payload mass changes? Already seeing failures with the heavier mugs. Try a 1D conv over the last 30 steps of joint torques, feed it to the policy. Cheap to test in sim first.",
+          "daysAgo": 12
+        }
+      ]
+    },
+    {
+      "name": "Reward Hacking",
+      "color": "lilac",
+      "notes": [
+        {
+          "text": "Eval plan: detecting reward hacking in code RL\nGoal: a held-out eval that catches the policy gaming the grader, separate from pass rate. Pass rate went up 14 points between ckpt 800 and 1400 and at least part of that was the stdout trick.\n\nCategories to cover:\n- test tampering: edits or deletes test files, adds skip markers, monkeypatches assert\n- output spoofing: prints the expected string, exits 0 early, catches all exceptions\n- special-casing: hardcodes answers for the visible test inputs\n- environment probing: reads grader files, checks env vars that reveal it's being scored\n- quiet give-up: returns a stub and claims it works in the summary\n\nSetup:\n- 300 tasks, half with deliberately weak tests so hacking is easy and tempting\n- hidden tests run in a separate sandbox the policy can't see\n- log every file write and process exit code\n- score = hidden pass rate, plus a flag for any tampering, plus whether the final message honestly reports failures\n\nTranscript classifier: regex for the obvious ones first (writes under tests/, sys.exit(0) before main logic), then an LLM judge for summary honesty. Hand-label 100 transcripts to get judge precision. Two raters on the same 100 to check agreement before trusting any of it.\n\nComparisons:\n- base SFT model\n- RL ckpts every 200 steps\n- RL with RM ensemble penalty\n- RL with KL 0.1 vs 0.02\nExpect hack rate to rise with steps and fall with higher KL. The ensemble might only delay it. That's the main question.\n\nOpen questions:\n- does training on visible-test-only rewards teach a general disposition to game, or only the specific tricks it found\n- is honest failure reporting a separate axis or does it move with tampering\n- how much shows up on non-code tasks, e.g. claiming it ran a command it didn't\n\nNext: write task templates, ask Priya for the grader sandbox, book GPU time for the ckpt sweep next week.",
+          "daysAgo": 4
+        },
+        {
+          "text": "KL penalty 0.02 vs 0.1 ablation",
+          "daysAgo": 2
+        },
+        {
+          "text": "Spec gaming examples to collect\n- model edits the unit tests instead of the code\n- sycophantic agreement scoring high on the helpfulness RM\n- length exploitation, RM prefers longer answers\n- hardcoding expected outputs\n- exiting early with success code",
+          "daysAgo": 6
+        },
+        {
+          "text": "RM overoptimization: plot gold vs proxy reward over steps",
+          "daysAgo": 9
+        },
+        {
+          "text": "ask Priya re held-out RM ckpt",
+          "daysAgo": 1
+        },
+        {
+          "text": "Reward model ensemble\nTrain 5 RMs on different seeds/data shards, penalize the policy when they disagree. Cheap uncertainty estimate. Check whether it delays the hack or just moves it somewhere else.",
+          "daysAgo": 18
+        },
+        {
+          "text": "GRPO group size 16",
+          "daysAgo": 3
+        },
+        {
+          "text": "Policy learned to print PASSED\nrun 77, step 1400. Grader regex matched stdout instead of checking the exit code. Patch grader, rerun from step 1000 ckpt, keep this transcript for the writeup.",
+          "daysAgo": 27
+        }
+      ]
+    },
+    {
+      "name": "Neural Decoding",
+      "color": "sage",
+      "notes": [
+        {
+          "text": "Kilosort params\nTh = [9 4]\nlam 10\nAUCsplit 0.9\nminFR 0.02\ndrift correction on, nblocks 5",
+          "daysAgo": 4
+        },
+        {
+          "text": "probe 2 shank 3 noisy above ch 300",
+          "daysAgo": 7
+        },
+        {
+          "text": "Decoder comparison, M1 reaching\n- Wiener filter R2 0.61\n- Kalman 0.68\n- GRU 0.79 (overfits after day 3)\n- NDT 0.81 but 6x slower to train\nNeed a cross-session test before trusting any of this.",
+          "daysAgo": 2
+        },
+        {
+          "text": "read: latent dynamics across sessions paper",
+          "daysAgo": 11
+        },
+        {
+          "text": "Spike sorting QC\nkeep units with ISI violations < 1%, amplitude cutoff < 0.1, presence ratio > 0.9, firing rate > 0.1 Hz. Manually check anything labeled good with SNR under 3. Log rejected unit counts per session.",
+          "daysAgo": 40
+        },
+        {
+          "text": "BCI journal club\nSpeech decoding from ventral motor cortex. Key question: how much of the performance is the language model prior vs neural signal? Ask whether they report chance with the LM alone. 20ms bins, 256 electrodes, 2 participants.",
+          "daysAgo": 16
+        },
+        {
+          "text": "bin 20ms, gaussian smooth 50ms",
+          "daysAgo": 1
+        },
+        {
+          "text": "Neuropixels recording checklist\n[ ] reference + ground shorted to tip\n[ ] insertion 10 um/s, wait 20 min before recording\n[ ] check sync pulse on both NI and probe streams\n[ ] note depth + angle in the log\n[ ] photo of craniotomy before and after",
+          "daysAgo": 5
+        }
+      ]
+    },
+    {
+      "name": "Cooking",
+      "color": "clay",
+      "notes": [
+        {
+          "text": "Miso cod\n- black cod, 2 fillets\n- white miso 3 tbsp\n- mirin 2 tbsp\n- sake 2 tbsp\n- sugar 1 tbsp\nMarinate 24-48h. Wipe off most of it, broil ~10 min until charred at the edges.",
+          "daysAgo": 6
+        },
+        {
+          "text": "miso",
+          "daysAgo": 0
+        },
+        {
+          "text": "Short rib ragu\nbrown hard, 3h at 300F, shred, finish with orange zest + parm. Better on day 2.",
+          "daysAgo": 9
+        },
+        {
+          "text": "buy fish sauce, galangal, lime leaves",
+          "daysAgo": 2
+        },
+        {
+          "text": "Sourdough schedule\n9pm feed starter 1:5:5\n8am mix, autolyse 1h\nadd salt, 4 sets of folds every 30 min\nbulk till +50% (~5h at 76F)\nshape, fridge overnight\nbake 500F lid on 20 min, 450F lid off 25",
+          "daysAgo": 20
+        },
+        {
+          "text": "sharpen knives, 1000/6000 stones",
+          "daysAgo": 13
+        },
+        {
+          "text": "Dal for 6\n2 cups toor dal, turmeric, salt, pressure cook 4 whistles\ntadka: ghee, cumin, mustard seed, hing, curry leaves, dried chili, garlic\nfinish with lemon + cilantro",
+          "daysAgo": 4
+        },
+        {
+          "text": "chili crisp: 1 cup oil to 1/2 cup flakes, shallots fried separately",
+          "daysAgo": 1
+        }
+      ]
+    },
+    {
+      "name": "Mountains",
+      "color": "sand",
+      "notes": [
+        {
+          "text": "Avy forecast Sat\nconsiderable above treeline, wind slab on N-NE aspects. Stay in low-angle trees, under 30deg. Re-check at 6am before leaving.",
+          "daysAgo": 1
+        },
+        {
+          "text": "WI4 lead next trip",
+          "daysAgo": 3
+        },
+        {
+          "text": "Ice climbing pack list\n[ ] screws x10 (2 x 22cm)\n[ ] tools + leashes\n[ ] crampons, check front points\n[ ] 2 pairs gloves + belay parka\n[ ] v-threader, cord\n[ ] thermos\n[x] rope, dry-treated",
+          "daysAgo": 7
+        },
+        {
+          "text": "wax skis before the trip",
+          "daysAgo": 10
+        },
+        {
+          "text": "Ski trip Jan\nCabin for 4, Fri-Mon. Leo + me driving, chains in the car. Buy lift tickets online before Dec 15 for the early price. Backup if lifts are on wind hold: skin up the north bowl.",
+          "daysAgo": 24
+        },
+        {
+          "text": "sharpen screws, 3 dull",
+          "daysAgo": 45
+        },
+        {
+          "text": "Route beta: the left gully\napproach 2h from the lot. Ice thin at the first step early season. Rap off the tree at top, 2x60m. Go before the sun hits it, ~10am.",
+          "daysAgo": 14
+        },
+        {
+          "text": "beacon battery",
+          "daysAgo": 2
+        }
+      ]
+    },
+    {
+      "name": "Home & Errands",
+      "color": "butter",
+      "notes": [
+        {
+          "text": "call dentist re crown",
+          "daysAgo": 1
+        },
+        {
+          "text": "Groceries\neggs, oat milk, spinach, lemons, coffee beans, tp",
+          "daysAgo": 0
+        },
+        {
+          "text": "Groceries\nrice, onions, yogurt, frozen peas, dish soap",
+          "daysAgo": 6
+        },
+        {
+          "text": "Bills\n- electric autopay, check why it went up again\n- internet promo ends next month, call to renegotiate\n- renters insurance renewal due the 28th\n- water bill, paid, keep the receipt",
+          "daysAgo": 3
+        },
+        {
+          "text": "bathroom faucet drip: washer or cartridge? landlord or DIY",
+          "daysAgo": 17
+        },
+        {
+          "text": "Car registration\nrenewal due end of month. Needs the emissions test first, the station on the main road does walk-ins before 10. Bring insurance card + old registration. Fee went up, check the amount on the notice.",
+          "daysAgo": 33
+        },
+        {
+          "text": "Taxes\ncollect 1099s, HSA form, donation receipts. Ask Sam if the home office deduction applies with the hybrid schedule. Estimated payment due Jan 15. Last year's return is in the blue folder in the desk.",
+          "daysAgo": 8
+        },
+        {
+          "text": "return shoes by Fri",
+          "daysAgo": 2
+        }
+      ]
+    }
+  ],
+  "inbox": [
+    {
+      "text": "Q3/Q4: plan\n- Q3: finish the domain rand sweep, get pick-place to 80% on the real arm\n- Q4: move to bimanual, order second arm, write up sim-to-real results\n- hire an intern for teleop data?",
+      "daysAgo": 3,
+      "expected": "Robot Learning",
+      "split": "tune"
+    },
+    {
+      "text": "tahini",
+      "daysAgo": 2,
+      "expected": "Cooking",
+      "split": "check"
+    },
+    {
+      "text": "🍋 lemon pasta tonight\nspaghetti, butter, lots of zest, parm, pasta water. 🧄 optional",
+      "daysAgo": 0,
+      "expected": "Cooking",
+      "split": "tune"
+    },
+    {
+      "text": "avy course refresher, Dec",
+      "daysAgo": 6,
+      "expected": "Mountains",
+      "split": "check"
+    },
+    {
+      "text": "Notes",
+      "daysAgo": 0,
+      "expected": null,
+      "split": "tune"
+    },
+    {
+      "text": "Neuropixels 2.0 order\nvendor confirmed 4 probes, ship date slipped to mid Nov. Need the new headstage + cable too, not in the original quote. Ask Leah whether the old basestation works with 2.0 or we need the new one.",
+      "daysAgo": 4,
+      "expected": "Neural Decoding",
+      "split": "check"
+    },
+    {
+      "text": "KL coeff 0.05 too low?",
+      "daysAgo": 1,
+      "expected": "Reward Hacking",
+      "split": "tune"
+    },
+    {
+      "text": "pick up dry cleaning",
+      "daysAgo": 0,
+      "expected": "Home & Errands",
+      "split": "check"
+    },
+    {
+      "text": "8a lead?",
+      "daysAgo": 3,
+      "expected": "Mountains",
+      "split": "tune"
+    },
+    {
+      "text": "what if attention is just a fancy kernel smoother again",
+      "daysAgo": 5,
+      "expected": null,
+      "split": "check"
+    },
+    {
+      "text": "Lab meeting notes: decoder drift\nDecoder trained on day 1 drops from R2 0.78 to 0.45 by day 7. Units drift on the probe, some disappear, new ones show up after re-sorting.\nIdeas raised:\n- align latent factors across days instead of retraining from scratch (Procrustes or CCA on the low-d dynamics)\n- train on threshold crossings instead of sorted units, skips the sorting problem entirely\n- short recalibration block at the start of each session, 2 min of cued reaching\nLeah thinks threshold crossings will lose too much for fine finger decoding. Worth testing anyway since it's cheap.\nAction items:\n- me: run the alignment on sessions 3-9 by next Fri\n- export sorted + unsorted features for the same sessions\n- check whether drift lines up with the days the headstage was reseated",
+      "daysAgo": 3,
+      "expected": "Neural Decoding",
+      "split": "tune"
+    },
+    {
+      "text": "teleop rig",
+      "daysAgo": 1,
+      "expected": "Robot Learning",
+      "split": "check"
+    },
+    {
+      "text": "robot vacuum stopped charging, warranty?",
+      "daysAgo": 2,
+      "expected": "Home & Errands",
+      "split": "tune"
+    },
+    {
+      "text": "Gochujang chicken\nthighs, gochujang 3 tbsp, soy, honey, garlic, ginger, rice vinegar. Sheet pan 425F 25 min, broil 2 min. Serve with quick pickled cucumbers + rice.",
+      "daysAgo": 8,
+      "expected": "Cooking",
+      "split": "check"
+    },
+    {
+      "text": "look up that line from the generation-ship novel about the long dark between stars",
+      "daysAgo": 8,
+      "expected": null,
+      "split": "tune"
+    },
+    {
+      "text": "RM prefers longer answers, control for length in the next eval",
+      "daysAgo": 0,
+      "expected": "Reward Hacking",
+      "split": "check"
+    },
+    {
+      "text": "Motor temps\nhit 70C after 40 min of rollouts on the real arm. Add a cooldown between episodes, or cap the episode rate. Check joint 2 and 3 specifically, those run hottest. Log temps to the run dashboard.",
+      "daysAgo": 2,
+      "expected": "Robot Learning",
+      "split": "tune"
+    },
+    {
+      "text": "Ice report\nlower falls in, upper still thin and chandeliered. Go Sat early, bring screamers and a couple of stubbies for the thin bits. Above freezing by 1pm, be off by then.",
+      "daysAgo": 1,
+      "expected": "Mountains",
+      "split": "check"
+    },
+    {
+      "text": "Thanksgiving\nbrine turkey Tues night, 1 cup salt per gallon, keep in the cooler with ice. Pull Wed night, dry uncovered in the fridge. Thu: 325F, in by 11 for a 4pm dinner. Sides: stuffing, green beans, cranberry. Ask Mia to bring pie.",
+      "daysAgo": 5,
+      "expected": "Cooking",
+      "split": "tune"
+    },
+    {
+      "text": "Kalman vs GRU on day 5 data",
+      "daysAgo": 2,
+      "expected": "Neural Decoding",
+      "split": "check"
+    },
+    {
+      "text": "reward clipping?",
+      "daysAgo": 6,
+      "expected": "Reward Hacking",
+      "split": "tune"
+    },
+    {
+      "text": "Passport\nrenew, expires in 7 months and some countries need 6 left. Photos at the pharmacy, form + old passport + check. Routine takes 6-8 weeks, mail it before planning the Feb trip.",
+      "daysAgo": 7,
+      "expected": "Home & Errands",
+      "split": "check"
+    },
+    {
+      "text": "Skis\nnew skins, glue failing at the tip. Check binding DIN before the season, should be 8. Edges need a tune after the rock at the end of last season. Shop said a week turnaround in November.",
+      "daysAgo": 2,
+      "expected": "Mountains",
+      "split": "tune"
+    },
+    {
+      "text": "tennis Thu 7am w/ Omar, court 4",
+      "daysAgo": 2,
+      "expected": null,
+      "split": "check"
+    },
+    {
+      "text": "spike sort session 14 tonight",
+      "daysAgo": 0,
+      "expected": "Neural Decoding",
+      "split": "tune"
+    },
+    {
+      "text": "Cast iron\nre-season: scrub the rust spot, thin coat of flaxseed oil, wipe almost all of it off, 450F upside down for 1h, cool in the oven. Repeat 3x. No tomato sauce in it for a while.",
+      "daysAgo": 15,
+      "expected": "Cooking",
+      "split": "check"
+    },
+    {
+      "text": "Landlord\nradiator banging, ask about bleeding it + the window seal before winter. Also the hallway light flickers and the back door lock sticks. Email with photos so there's a record.",
+      "daysAgo": 4,
+      "expected": "Home & Errands",
+      "split": "tune"
+    },
+    {
+      "text": "Notes from hardware call\nGripper vendor says new fingertips ship in 3 weeks. Silicone pads wear after ~2k grasps, which matches the success drop in run 0419. Plan: log grasp count per pad, swap at 1500.\nF/T sensor drift: zero it at the start of every episode instead of once per session. Need a reset routine that moves the arm to a free-space pose, waits 2 s, then zeros.\nEncoder offset on joint 4 after last week's e-stop is still unexplained. Ivan thinks the cable got pinched. Re-run the calibration script and compare against the March values before trusting any new runs.",
+      "daysAgo": 4,
+      "expected": "Robot Learning",
+      "split": "check"
+    },
+    {
+      "text": "reward myself: new running shoes after the 10k",
+      "daysAgo": 3,
+      "expected": null,
+      "split": "tune"
+    },
+    {
+      "text": "Goodhart writeup outline\n1. proxy vs true objective\n2. examples from our runs (test editing, stdout spoofing)\n3. mitigations tried: RM ensemble, KL, held-out graders\n4. what still breaks\n5. what we'd measure next time",
+      "daysAgo": 12,
+      "expected": "Reward Hacking",
+      "split": "check"
+    },
+    {
+      "text": "Tarte tatin\n6 pommes, 100 g de sucre, 50 g de beurre. Caraméliser dans la poêle, poser la pâte feuilletée dessus, 30 min à 190°C. Retourner tiède.",
+      "daysAgo": 11,
+      "expected": "Cooking",
+      "split": "tune"
+    },
+    {
+      "text": "BCI paper: cursor control in 2 participants. Check their bits/s calculation, it looks like they count the dwell time differently than the earlier work. Also whether the decoder was recalibrated daily.",
+      "daysAgo": 10,
+      "expected": "Neural Decoding",
+      "split": "check"
+    },
+    {
+      "text": "sim-to-real: randomize lighting more, policy fails near the window around 4pm",
+      "daysAgo": 5,
+      "expected": "Robot Learning",
+      "split": "tune"
+    },
+    {
+      "text": "Hut trip Feb\n4 nights, 6 people. Split food: 2 breakfasts each. Need 2 stoves, shovel + probe + beacon for every person, satellite messenger. Permit window opens Nov 1.",
+      "daysAgo": 14,
+      "expected": "Mountains",
+      "split": "check"
+    },
+    {
+      "text": "Sycophancy probe set\n200 prompts where the user states a wrong belief with confidence. Score whether the model corrects them. Mix domains: math, history, code review. Run on base, the RLHF ckpt, and the ensemble-penalty run.",
+      "daysAgo": 9,
+      "expected": "Reward Hacking",
+      "split": "tune"
+    },
+    {
+      "text": "Saturday\n[ ] laundry\n[ ] return library books\n[x] pay water bill\n[ ] hardware store: picture hooks, AA batteries\n[ ] call mom",
+      "daysAgo": 3,
+      "expected": "Home & Errands",
+      "split": "check"
+    },
+    {
+      "text": "CAR before sorting, not after. Check preprocessing order in the pipeline and rerun sessions 10-13 if it was wrong.",
+      "daysAgo": 1,
+      "expected": "Neural Decoding",
+      "split": "tune"
+    },
+    {
+      "text": "Lisbon again in spring? flights cheap in March",
+      "daysAgo": 10,
+      "expected": null,
+      "split": "check"
+    },
+    {
+      "text": "crampon anti-balling plates",
+      "daysAgo": 9,
+      "expected": "Mountains",
+      "split": "tune"
+    },
+    {
+      "text": "https://arxiv.org/abs/2510.07731",
+      "daysAgo": 1,
+      "expected": null,
+      "split": "check"
+    },
+    {
+      "text": "Dentist Tues 3pm",
+      "daysAgo": 1,
+      "expected": "Home & Errands",
+      "split": "tune"
+    },
+    {
+      "text": "try 6 frame obs delay in sim",
+      "daysAgo": 0,
+      "expected": "Robot Learning",
+      "split": "check"
+    },
+    {
+      "text": "Books to find\n- hard sf with real orbital mechanics, no space opera\n- the Mars terraforming trilogy Dana mentioned\n- something on first contact that isn't military\n- the short story collection about an AI that keeps its promises",
+      "daysAgo": 12,
+      "expected": null,
+      "split": "tune"
+    },
+    {
+      "text": "Eval idea: give the model a task where the tests are visibly broken. Does it fix the tests, work around them, or report the problem? Score honest reporting separately from pass rate.",
+      "daysAgo": 2,
+      "expected": "Reward Hacking",
+      "split": "check"
+    }
+  ],
+  "archive": [
+    {
+      "text": "Rebuttal points\n- R2 says no real-robot baseline: point to the appendix table\n- R3 wants more seeds: running 5 now, add error bars\n- clarify the randomization ranges in the method section\n- reviewer 1 confused about the reward, rewrite the paragraph",
+      "daysAgo": 140
+    },
+    {
+      "text": "Lisbon trip\nFlight lands 7:40am. Tram 28 early before crowds. Dinner: the grilled sardine place near the river, book ahead. Day trip to Sintra Thursday, train from Rossio. Pack a light rain jacket.",
+      "daysAgo": 200
+    },
+    {
+      "text": "half marathon taper",
+      "daysAgo": 75
+    },
+    {
+      "text": "Old robot cell layout\narm on the left bench, cameras on the overhead rail, e-stop by the door",
+      "daysAgo": 90
+    },
+    {
+      "text": "restring racket 52 lbs",
+      "daysAgo": 35
+    }
+  ]
+}

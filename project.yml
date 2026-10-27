@@ -1,0 +1,65 @@
+name: OrganizedStickies
+options:
+  bundleIdPrefix: com.amalmehta
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  StickiesCore:
+    path: Core
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  OrganizedStickies:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: StickiesCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Organized Stickies
+        CFBundleName: Organized Stickies
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: "© 2026 Amal Mehta"
+        LSMinimumSystemVersion: "26.0"
+    settings:
+      base:
+        PRODUCT_NAME: Organized Stickies
+        PRODUCT_BUNDLE_IDENTIFIER: com.amalmehta.OrganizedStickies
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+  OrganizedStickiesUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - UITests
+    dependencies:
+      - target: OrganizedStickies
+    settings:
+      base:
+        TEST_TARGET_NAME: OrganizedStickies
+        PRODUCT_BUNDLE_IDENTIFIER: com.amalmehta.OrganizedStickiesUITests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  OrganizedStickies:
+    build:
+      targets:
+        OrganizedStickies: all
+        OrganizedStickiesUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - OrganizedStickiesUITests
