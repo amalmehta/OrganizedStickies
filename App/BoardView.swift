@@ -5,7 +5,7 @@ struct BoardView: View {
     @Environment(Board.self) private var board
     @Environment(\.textScale) private var scale
     @FocusState private var gridFocused: Bool
-    @State private var columns = 3
+    @State private var memory = ColumnMemory()
 
     static let minCard: CGFloat = 210
     static let spacing: CGFloat = 16
@@ -22,7 +22,7 @@ struct BoardView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.window)
+        .background { Backdrop().ignoresSafeArea() }
     }
 
     @ViewBuilder
@@ -62,38 +62,51 @@ struct BoardView: View {
 
     private func grid(_ folder: Folder) -> some View {
         GeometryReader { geo in
+            let count = Self.columnCount(width: geo.size.width, scale: scale)
+            let width = Self.columnWidth(total: geo.size.width, count: count, scale: scale)
+            let columns = memory.columns(for: folder, count: count, width: width, scale: scale,
+                                         hasFooterNote: { folder.kind == .inbox || board.isStale($0, in: folder) })
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.minCard * scale, maximum: 320 * scale), spacing: Self.spacing)],
-                              spacing: Self.spacing) {
-                        ForEach(folder.notes) { note in
-                            StickyCard(note: note, folder: folder)
-                                .id(note.id)
-                                .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    HStack(alignment: .top, spacing: Self.spacing) {
+                        ForEach(columns.indices, id: \.self) { c in
+                            LazyVStack(spacing: Self.spacing) {
+                                ForEach(columns[c]) { note in
+                                    StickyCard(note: note, folder: folder) { dropped in
+                                        for id in dropped { memory.put(id, inColumnOf: note.id) }
+                                    }
+                                    .id(note.id)
+                                    .accessibilitySortPriority(memory.readingPriority(note.id))
+                                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                                }
+                            }
+                            .frame(width: width)
                         }
                     }
+                    // VoiceOver reads cards in board order, not column by column.
+                    .accessibilityElement(children: .contain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
                     .padding(.top, 4)
-                    .animation(.easeOut(duration: 0.2), value: folder.notes.map(\.id))
+                    .animation(.snappy(duration: 0.22), value: folder.notes.map(\.id))
                 }
                 .scrollContentBackground(.hidden)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { board.frames.board = $0 }
                 .onChange(of: board.selectedNoteID) { _, id in
-                    if let id { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id) } }
+                    if let id { withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id) } }
                 }
             }
-            .onAppear { columns = Self.columnCount(width: geo.size.width, scale: scale) }
-            .onChange(of: geo.size.width) { _, w in columns = Self.columnCount(width: w, scale: scale) }
         }
         .contentShape(Rectangle())
         .onTapGesture { board.endEditing(); gridFocused = true }
         .focusable()
         .focusEffectDisabled()
         .focused($gridFocused)
-        .onKeyPress(.leftArrow) { arrow(-1) }
-        .onKeyPress(.rightArrow) { arrow(1) }
-        .onKeyPress(.upArrow) { arrow(-columns) }
-        .onKeyPress(.downArrow) { arrow(columns) }
+        .onKeyPress(.leftArrow) { arrow(.left) }
+        .onKeyPress(.rightArrow) { arrow(.right) }
+        .onKeyPress(.upArrow) { arrow(.up) }
+        .onKeyPress(.downArrow) { arrow(.down) }
         .onKeyPress(.return) {
             guard board.editingNoteID == nil, let id = board.selectedNoteID else { return .ignored }
             board.beginEditing(id)
@@ -107,14 +120,84 @@ struct BoardView: View {
         .onChange(of: board.selectedFolderID) { _, _ in gridFocused = true }
     }
 
-    private func arrow(_ delta: Int) -> KeyPress.Result {
-        guard board.editingNoteID == nil else { return .ignored }
-        board.moveSelection(by: delta)
+    private func arrow(_ direction: ColumnMemory.Direction) -> KeyPress.Result {
+        guard board.editingNoteID == nil, let folder = board.selectedFolder, !folder.notes.isEmpty else { return .ignored }
+        // Nothing selected yet: any arrow picks the first note.
+        guard let current = board.selectedNoteID, folder.notes.contains(where: { $0.id == current }) else {
+            board.selectedNoteID = folder.notes.first?.id
+            return .handled
+        }
+        if let next = memory.neighbor(of: current, direction) { board.selectedNoteID = next }
         return .handled
     }
 
     static func columnCount(width: CGFloat, scale: Double) -> Int {
         max(1, Int((width - 48 + spacing) / (minCard * scale + spacing)))
+    }
+
+    /// Columns share the width, up to 320 points each (wider cards read badly).
+    static func columnWidth(total: CGFloat, count: Int, scale: Double) -> CGFloat {
+        let fit = (total - 48 - CGFloat(count - 1) * spacing) / CGFloat(count)
+        return max(minCard * scale * 0.8, min(320 * scale, fit))
+    }
+}
+
+/// Which column each card sits in, kept while you work so that moving one
+/// card out doesn't send the cards after it hopping between columns. Starts
+/// fresh when you switch folders or the window changes how many columns fit.
+@MainActor final class ColumnMemory {
+    enum Direction { case up, down, left, right }
+
+    private var key: (folder: Folder.ID, count: Int)?
+    private var placed: [Note.ID: Int] = [:]
+    private var laidOut: [[Note.ID]] = []
+    private var top: [Note.ID: Double] = [:]
+    private var order: [Note.ID: Int] = [:]
+
+    func columns(for folder: Folder, count: Int, width: CGFloat, scale: Double, hasFooterNote: (Note) -> Bool) -> [[Note]] {
+        if key?.folder != folder.id || key?.count != count {
+            placed = [:]
+            key = (folder.id, count)
+        }
+        let ids = folder.notes.map(\.id)
+        let heights = folder.notes.map { CardHeight.estimate($0, width: width, scale: scale, hasFooterNote: hasFooterNote($0)) }
+        placed = ColumnPacking.assign(ids: ids, heights: heights, columns: count, keep: placed)
+        laidOut = ColumnPacking.columns(ids: ids, assignment: placed, count: count)
+        let height = Dictionary(uniqueKeysWithValues: zip(ids, heights))
+        top = [:]
+        for column in laidOut {
+            var y = 0.0
+            for id in column { top[id] = y; y += (height[id] ?? 0) + BoardView.spacing }
+        }
+        order = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+        let byID = Dictionary(uniqueKeysWithValues: folder.notes.map { ($0.id, $0) })
+        return laidOut.map { $0.compactMap { byID[$0] } }
+    }
+
+    /// A dropped note joins the column of the card it was dropped on.
+    func put(_ id: Note.ID, inColumnOf other: Note.ID) {
+        if let c = placed[other] { placed[id] = c }
+    }
+
+    /// Higher reads first, so VoiceOver follows the notes' order.
+    func readingPriority(_ id: Note.ID) -> Double {
+        Double(order.count - (order[id] ?? order.count))
+    }
+
+    /// Up and down stay in the column; left and right go to the card at about
+    /// the same height in the next column.
+    func neighbor(of id: Note.ID, _ direction: Direction) -> Note.ID? {
+        guard let c = laidOut.firstIndex(where: { $0.contains(id) }), let i = laidOut[c].firstIndex(of: id) else { return nil }
+        switch direction {
+        case .up: return i > 0 ? laidOut[c][i - 1] : nil
+        case .down: return i + 1 < laidOut[c].count ? laidOut[c][i + 1] : nil
+        case .left, .right:
+            var n = direction == .left ? c - 1 : c + 1
+            while laidOut.indices.contains(n) && laidOut[n].isEmpty { n += direction == .left ? -1 : 1 }
+            guard laidOut.indices.contains(n) else { return nil }
+            let y = top[id] ?? 0
+            return laidOut[n].min { abs((top[$0] ?? 0) - y) < abs((top[$1] ?? 0) - y) }
+        }
     }
 }
 
@@ -136,7 +219,7 @@ struct BoardHeader: View {
             }
             Spacer()
             if folder.kind == .inbox && !folder.notes.isEmpty {
-                if board.isSorting && board.suggestedMoves.isEmpty {
+                if board.isSorting {
                     ProgressView().controlSize(.small)
                 }
                 Button { showHowItWorks.toggle() } label: {
@@ -169,6 +252,7 @@ struct BoardHeader: View {
             if board.library.userFolders.isEmpty { return "\(notes) · make a folder to start sorting" }
             let n = board.suggestedMoves.count
             if n == 0 && board.isSorting { return "\(notes) · sorting…" }
+            if n > 0 && board.isSorting { return "\(notes) · \(n) with a suggested folder so far · sorting…" }
             return n > 0 ? "\(notes) · \(n) with a suggested folder. Nothing moves until you click." : "\(notes) · no confident suggestions right now"
         case .archive:
             return count > 0 ? "\(notes) you're done with. Still searchable." : "Notes you're done with."
@@ -223,14 +307,33 @@ struct SearchResultsView: View {
                                title: "No notes match",
                                message: "Search looks at every word in every folder, Archive included. Try a shorter word.")
             } else {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: BoardView.minCard * scale, maximum: 320 * scale), spacing: 16)], spacing: 16) {
-                        ForEach(results, id: \.note.id) { r in
-                            StickyCard(note: r.note, folder: r.folder, showFolder: true)
+                GeometryReader { geo in
+                    let count = BoardView.columnCount(width: geo.size.width, scale: scale)
+                    let width = BoardView.columnWidth(total: geo.size.width, count: count, scale: scale)
+                    let ids = results.map(\.note.id)
+                    let heights = results.map { CardHeight.estimate($0.note, width: width, scale: scale, hasFooterNote: false) }
+                    let columns = ColumnPacking.columns(ids: ids, assignment: ColumnPacking.assign(ids: ids, heights: heights, columns: count), count: count)
+                    let byID = Dictionary(uniqueKeysWithValues: results.map { ($0.note.id, $0) })
+                    let rank = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+                    ScrollView {
+                        HStack(alignment: .top, spacing: BoardView.spacing) {
+                            ForEach(columns.indices, id: \.self) { c in
+                                LazyVStack(spacing: BoardView.spacing) {
+                                    ForEach(columns[c], id: \.self) { id in
+                                        if let r = byID[id] {
+                                            StickyCard(note: r.note, folder: r.folder, showFolder: true)
+                                                .accessibilitySortPriority(Double(ids.count - (rank[id] ?? 0)))
+                                        }
+                                    }
+                                }
+                                .frame(width: width)
+                            }
                         }
+                        .accessibilityElement(children: .contain)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 24)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
                 }
             }
         }

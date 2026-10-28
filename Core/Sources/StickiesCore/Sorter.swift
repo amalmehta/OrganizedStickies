@@ -168,16 +168,47 @@ public struct Sorter: Sendable {
         self.embedder = embedder
     }
 
+    /// The first word analysis in a process takes about 2 s while macOS loads
+    /// its language data; later ones take well under 1 ms a note. Call this
+    /// early, in the background, so the first sort doesn't pay for it.
+    public static func warmUp(_ embedder: SentenceEmbedder? = nil) {
+        _ = TextAnalysis.terms("Warming up the notes sorter")
+        _ = embedder?.vector(for: "Warming up the notes sorter")
+    }
+
     public func suggest(notes: [(id: UUID, text: String)], folders: [SortCandidate]) -> [UUID: SortOutcome] {
-        let analyses = analyze(notes: notes.map(\.text), folders: folders)
         var out: [UUID: SortOutcome] = [:]
-        for (n, a) in zip(notes, analyses) { out[n.id] = decide(a, hasFolders: !folders.isEmpty) }
+        suggest(notes: notes, folders: folders) { out.merge($0) { _, new in new } }
         return out
     }
 
+    /// Same answers as `suggest`, handed over a few notes at a time in the
+    /// order given, so the first cards get theirs in a fraction of a second.
+    /// Stops early if the calling task is cancelled.
+    public func suggest(notes: [(id: UUID, text: String)], folders: [SortCandidate], batchSize: Int = 12,
+                        onBatch: ([UUID: SortOutcome]) -> Void) {
+        let hasFolders = !folders.isEmpty
+        analyze(notes: notes.map(\.text), folders: folders, batchSize: batchSize) { range, analyses in
+            var out: [UUID: SortOutcome] = [:]
+            for (n, a) in zip(notes[range], analyses) { out[n.id] = decide(a, hasFolders: hasFolders) }
+            onBatch(out)
+        }
+    }
+
     public func analyze(notes: [String], folders: [SortCandidate]) -> [NoteAnalysis] {
-        let noteTerms = notes.map(TextAnalysis.terms)
-        let folderNoteTerms = folders.map { $0.notes.map(TextAnalysis.terms) }
+        var out: [NoteAnalysis] = []
+        analyze(notes: notes, folders: folders, batchSize: max(notes.count, 1)) { _, a in out += a }
+        return out
+    }
+
+    /// The expensive part. Word weights (IDF) use every note up front, so a
+    /// note's analysis is identical whichever batch it lands in.
+    public func analyze(notes: [String], folders: [SortCandidate], batchSize: Int,
+                        onBatch: (Range<Int>, [NoteAnalysis]) -> Void) {
+        let allTerms = TextAnalysis.terms(for: notes + folders.flatMap(\.notes))
+        let noteTerms = Array(allTerms.prefix(notes.count))
+        var rest = allTerms.dropFirst(notes.count)
+        let folderNoteTerms = folders.map { f in (0..<f.notes.count).map { _ in rest.popFirst()! } }
         let idf = IDF(documents: noteTerms + folderNoteTerms.flatMap { $0 })
 
         let folderVectors: [TermVector] = folders.indices.map { i in
@@ -188,11 +219,10 @@ public struct Sorter: Sendable {
             return v
         }
 
-        // Meaning vectors for every text in one batch (parallel, cached).
-        let allTexts = notes + folders.flatMap { [$0.name] + $0.notes }
-        var vectors = (embedder?.vectors(for: allTexts) ?? allTexts.map { _ in nil })[...]
-        let noteVectors = Array(vectors.prefix(notes.count))
-        vectors = vectors.dropFirst(notes.count)
+        // Meaning vectors for the folders first (every note needs them), in
+        // one parallel, cached batch.
+        let folderTexts = folders.flatMap { [$0.name] + $0.notes }
+        var vectors = (embedder?.vectors(for: folderTexts) ?? folderTexts.map { _ in nil })[...]
         // Each folder's name plus its notes.
         let folderMeaning: [[(title: String, v: [Double])]] = folders.map { f in
             var list: [(String, [Double])] = []
@@ -209,9 +239,18 @@ public struct Sorter: Sendable {
             return unit(c)
         }
 
-        return notes.indices.map { ni in
+        let size = max(1, batchSize)
+        for start in stride(from: 0, to: notes.count, by: size) {
+            if Task.isCancelled { return }
+            let range = start..<min(start + size, notes.count)
+            let texts = Array(notes[range])
+            let noteVectors = embedder?.vectors(for: texts) ?? texts.map { _ in nil }
+            onBatch(range, range.map { analyzeOne($0, noteVectors[$0 - start]) })
+        }
+
+        func analyzeOne(_ ni: Int, _ vector: [Double]?) -> NoteAnalysis {
             let tv = idf.vector(noteTerms[ni])
-            let nv = noteVectors[ni].map(unit)
+            let nv = vector.map(unit)
             let matches = folders.indices.map { fi -> NoteAnalysis.FolderMatch in
                 var mean: Double?, nearest: Double?, nearestTitle: String?
                 if let nv, let c = centroids[fi] {

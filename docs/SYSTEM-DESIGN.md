@@ -1,8 +1,9 @@
 # System Design
 
-Organized Stickies is one Mac window, a backboard. Folders sit in the sidebar,
-and the chosen folder's notes sit in a grid. Every note is a plain Markdown
-file in a real Finder folder. Sorting suggestions run on this Mac.
+Organized Stickies is one Mac window, a backboard of frosted glass. Folders sit
+in the sidebar, and the chosen folder's notes sit in staggered columns, each
+card as tall as its text. Every note is a plain Markdown file in a real Finder
+folder. Sorting suggestions run on this Mac.
 
 ## Architecture
 
@@ -19,6 +20,7 @@ flowchart LR
     Sorter["Sorter<br/>TF-IDF + sentence vectors"]
     Stale[Staleness]
     Importer[StickiesImporter]
+    Packing[ColumnPacking]
   end
   FS[("~/Documents/Organized Stickies/<br/>Inbox/ Archive/ Robotics/ …<br/>*.md + .organizedstickies.json")]
   AS[("Apple Stickies files<br/>(read only)")]
@@ -29,6 +31,7 @@ flowchart LR
   Board -- background --> Loader --> FS
   Board -- background --> Sorter --> NL
   Board --> Stale
+  UI --> Packing
   Board -- background --> Importer --> AS
 ```
 
@@ -40,6 +43,7 @@ flowchart LR
 | **Sorter** | Suggests a folder for each Inbox note, or says "No clear match". Explains why. |
 | **Staleness** | Decides which notes have been untouched for N days or more. |
 | **StickiesImporter** | Copies Apple Stickies' notes (`.rtfd` packages) as plain text. Read only. |
+| **ColumnPacking** | Puts cards of different heights into columns, each card into the shortest column so far. Cards keep their column while you work, so moving one out doesn't send the rest hopping. |
 | **Board** (app) | Wraps a `Library` for SwiftUI. Applies edits straight away, then sends the disk work to one serial background queue (an `AsyncStream`, so writes, reloads and barriers keep their order). Debounces typing (writes 0.5 s after the last keystroke). Flushes when the app goes to the background, and waits for the queue before quitting. Reloads when the app becomes active. |
 | **App shell** | One AppKit `NSWindow` hosting the SwiftUI board, opened by the app delegate. SwiftUI scene windows didn't always open at launch (with `-ApplePersistenceIgnoreState`, which UI tests pass), so the boring AppKit window is used. Settings is a SwiftUI `Settings` scene (⌘,). |
 
@@ -48,9 +52,10 @@ flowchart LR
 1. **Launch**: show the last snapshot straight away. Then `LibraryLoader` runs in the background and the board is replaced in place, with note IDs kept stable by matching (folder, file name).
 2. **Type in a note**: the text changes in memory on every keystroke. After 0.5 s idle, `Library.persist(note)` works out whether the title changed. If it did, it plans a rename, and `NoteDisk` writes the file atomically.
 3. **Move or reorder**: drag a card onto a sidebar folder (move), or onto another card (reorder). The UI updates at once; `DiskOp.move` and `saveIndex` follow in the background.
-4. **Sort Inbox**: the Board takes a snapshot of the texts, then the Sorter runs on a background task. Suggestions appear as small chips on each card: **Move to Robotics**, with a reason line. You accept or dismiss each one. Nothing moves without a click.
-5. **Stale**: a note untouched for N days or more (not in Archive) shows **Archive?** with its age.
-6. **Import**: in Settings, Import from Apple Stickies copies every note into Inbox, keeping each note's original edit date. IDs already imported are remembered, so running it twice doesn't duplicate notes.
+4. **Sort Inbox**: the Board takes a snapshot of the texts, then the Sorter runs on a background task and hands back results a dozen notes at a time, top of the Inbox first. Each card's chip appears as soon as its batch is done: **Move to Robotics**, with a reason line. You accept or dismiss each one. Nothing moves without a click.
+5. **Accept**: the card's ghost flies from where it sat to its folder row in the sidebar (300 ms), and the folder's count ticks up as it lands. Only cards on screen fly, and nothing flies with Reduce Motion on. The move itself happens at once; the flight is only a picture of it.
+6. **Stale**: a note untouched for N days or more (not in Archive) shows **Archive?** with its age.
+7. **Import**: in Settings, Import from Apple Stickies copies every note into Inbox, keeping each note's original edit date. IDs already imported are remembered, so running it twice doesn't duplicate notes.
 
 ## Where data lives
 
@@ -103,6 +108,8 @@ What this shows: on its own, Apple's meaning model blurs the three research fold
 
 **What didn't work:** the first version used an absolute margin over the runner-up and tuned only on the 22 Inbox notes. It reached 82% precision on the check set (2 wrong out of 11) and overfit. Switching to a scale-free ratio and adding leave-one-out cases fixed both.
 
+**Streaming, and where the time goes.** Word weights (IDF) need every note's words before any note can be scored, so that part runs first; the meaning vectors, the slow part, then run a dozen notes at a time. A note's answer is the same whichever batch it lands in (tested). Finding each word's dictionary form uses Apple's `NLTagger`; making a tagger costs far more than using one, so taggers are now reused and each note's words are remembered. Measured on 200 notes: 2.4 s with a new tagger per note, 0.19 s reused. Spreading the tagging over cores was slower (2.1 s), because every core needs its own tagger. The first use in a session still loads macOS's language data, so the app warms it up in the background at launch.
+
 Why not an LLM? It would be more accurate on short notes, but it costs money, needs a key, and sends note text off the Mac. It's deferred as a swappable `Sorter` implementation.
 
 ## Key decisions and trade-offs
@@ -116,19 +123,21 @@ Why not an LLM? It would be more accurate on short notes, but it costs money, ne
 | Suggest, never auto-move | A wrong automatic move costs more trust than a missed suggestion. | One click per note. |
 | Unsandboxed local build | Needs to read Apple Stickies' container and ~/Documents. | Gatekeeper warns on other Macs. Not App Store ready. |
 | System serif (New York) + SF | No font downloads or licensing work. | Not exactly Newsreader/Inter (bundling them is a proposal). |
+| Frosted glass board, solid paper cards | You asked for the window to feel part of the desktop. Cards stay solid so text reads the same over any background. | The board's color shifts with what's behind it. It stays frosted when the window isn't in front, unlike most Mac apps. Reduce Transparency gives solid paper. |
+| Columns that keep their cards | Short notes get short cards, with no blank paper. Keeping each card's column stops cards jumping when one leaves. | After many moves, columns can end at different heights. They even out when you switch folders or resize the window. Reading order runs across columns, so the newest note isn't always top-left. |
 
 ## Scale and what would change
 
 Sized for today: hundreds of notes, one Mac.
 
 - **~5,000+ notes**: loading every file at launch gets slow (about 1 s). Cache the snapshot and load folders lazily.
-- **Sorting**: a meaning vector costs about 15–30 ms per note. Vectors are computed in parallel (one model copy per core) and cached in memory by text, so only new or edited notes cost anything after the first sort. Measured: 200 Inbox notes against 48 filed ones take 4.4 s the first time (release build), down from 9.1 s single-threaded. At ~2,000 notes, persist the cache to disk and sort incrementally.
+- **Sorting**: a meaning vector costs about 15–30 ms per note. Vectors are computed in parallel (one model copy per core) and cached in memory by text, as are each note's words, so only new or edited notes cost anything after the first sort. Measured on 2026-10-26 with the Mac otherwise quiet: 200 Inbox notes against 48 filed ones took 4.4 s the first time (release build), down from 9.1 s single-threaded. On 2026-10-27, with other apps keeping the CPU busy (load average 50–500), the same sort took 9–16 s in both the old and new code, run back to back, so streaming costs nothing in total. Under that load the first dozen suggestions arrived after about 1.7 s. At ~2,000 notes, persist the caches to disk and sort incrementally.
 - **Two Macs**: put the root in iCloud Drive, then add a file watcher (FSEvents) and conflict handling (two edits to the same note).
 - **Other people / sharing**: needs a sync service and an auth model. Out of scope.
 
 ## Testing
 
-- `swift test` in `Core/` runs 38 unit tests: Library planning (create, rename on title change, collisions, move, reorder, trash, folders, import de-duplication), the disk round trip in a temp folder (case-only renames, Trash, external files, bad UTF-8, corrupt index, reload merge that keeps unsaved text), the importer (fixture `.rtfd` packages), staleness, the sorter (unit cases, plus the spec's done criterion on the held-out half) and performance budgets (edits on a 500-note folder < 16 ms, loading 1,000 notes < 1 s, sorting 200 notes < 10 s).
+- `swift test` in `Core/` runs 45 unit tests: Library planning (create, rename on title change, collisions, move, reorder, trash, folders, import de-duplication), the disk round trip in a temp folder (case-only renames, Trash, external files, bad UTF-8, corrupt index, reload merge that keeps unsaved text), the importer (fixture `.rtfd` packages), staleness, the sorter (unit cases, the spec's done criterion on the held-out half, streamed batches giving the same answers in order, and batches spreading out over the run), column packing (tall cards, keeping columns when a card leaves, new cards to the shortest column) and performance budgets (edits on a 500-note folder < 16 ms, loading 1,000 notes < 1 s, sorting 200 notes < 10 s).
 - `swift run sorter-eval` re-fits and re-reports the sorter against baselines.
 - An XCUITest target drives the main flows in demo mode (`-demo` opens a temporary copy of the sample notes): writing a note, accepting suggestions, making and renaming a folder, search, keyboard move, quitting mid-typing (the text survives), Settings and the feedback sheet. 7 tests.
 - A manual review checklist covers feel, smoothness and real data: see `docs/INSTRUCTIONS.md`.
@@ -141,4 +150,6 @@ Sized for today: hundreds of notes, one Mac.
 - Keyboard: picking a folder moves the keyboard to its notes. Tab reaches the grid only when Keyboard navigation is on in System Settings.
 - Meaning-based matching is English only. Other languages rely on word overlap.
 - Short notes often get "No clear match". That's by design.
+- VoiceOver reads cards in the notes' order across columns, using sort priorities. That's checked in code, not yet by ear.
+- The fly-to-folder animation is checked through logs (each accepted card's ghost starts at the card and aims at the right folder row), not by screen capture: captures of the window took about 5 s each on the busy Mac, and the flight lasts 0.3 s.
 - External edits made while the app is in front show up only after you switch away and back.

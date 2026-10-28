@@ -369,6 +369,14 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
   VoiceOver element each, with named actions.
 - Look: "Muted paper". Muted sticky colors, a serif title over a clean sans,
   and dark mode that stays quiet.
+- Changed 2026-10-27, at my request ("sexy smooth", "translucent so it feels
+  one with the computer"): the board is frosted glass that shows the desktop
+  through a thin layer of paper (I chose "more see-through"); cards stay solid
+  paper so text reads the same, and Reduce Transparency brings back solid
+  paper. From ten proposals I picked three: cards fit their text in staggered
+  columns, an accepted note flies to its folder and the count ticks up as it
+  lands, and suggestions appear a dozen notes at a time instead of all at the
+  end.
 - Delivery: local build for macOS 26 or later, signed for this Mac only, in
   /Applications. Code goes to a public GitHub repo, amalmehta/OrganizedStickies.
 - Measured on my real Apple Stickies (word counts only, no text read): 25 notes,
@@ -396,7 +404,9 @@ DEFINITIONS AND DEFERRED:
   clear keyword or folder-name hit.
 - Smooth: every click and keystroke responds in under 100 ms; sorting,
   loading and import run off the main thread; scrolling a 500-note folder
-  holds the display rate; transitions take 150–250 ms.
+  holds the display rate; transitions take 150–250 ms, except a card flying
+  across the window to its folder, which takes 300 ms (shorter reads as a
+  flicker over that distance).
 - MVP done: create, edit, reorder, move and delete notes (delete moves the
   file to the Trash); create, rename, recolor and delete folders; Sort Inbox
   with reasons; stale suggestions; search; import from Apple Stickies;
@@ -407,7 +417,11 @@ DEFINITIONS AND DEFERRED:
   the app becomes active), a global hotkey, a Claude API sorter, a website,
   notarized distribution, bundling the Newsreader and Inter fonts (the system
   serif New York and SF stand in), and learning from accepted or rejected
-  suggestions.
+  suggestions. From the 2026-10-27 smoothness list, not picked: a quieter
+  "No clear match" (a ? mark with the reason on hover), stale clocks out of the
+  sidebar, spring animations everywhere, expanding a card into a roomy editor,
+  folders that fade into each other and keep their scroll position, saving
+  the sorter's data between launches, and a trackpad tap on drop.
 
 OPEN QUESTIONS / ASSUMPTIONS:
 
@@ -479,3 +493,4 @@ CHANGELOG:
 - 2026-10-26 — changed meta-instruction: the interface isn't cheesy (no gimmicky copy, forced jokes or over-the-top celebration; personality stays quiet)
 - 2026-10-26 — recorded design decisions, definitions, deferred list and assumptions from the first question rounds
 - 2026-10-26 — built v1.0: board app, on-device sorter (fitted and evaluated on sample notes), importer, settings, feedback, icon, tests and docs
+- 2026-10-27 — v1.1: glass backboard, cards that fit their text, notes that fly to their folder, suggestions that stream in; word analysis about 13× faster (taggers reused); recorded the six smoothness proposals not picked

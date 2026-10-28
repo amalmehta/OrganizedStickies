@@ -60,6 +60,10 @@ Things tests can't judge. Check these after any visible change:
 - [ ] **Real notes**: after importing your Apple Stickies, are the suggestions you see right? Count wrong ones. If more than about 1 in 10 are wrong, switch Settings › Sorting to Careful and tell me which ones.
 - [ ] **Stale**: does 14 days flag notes you'd actually archive?
 - [ ] **Dark mode**: cards, chips and the sidebar stay quiet and readable.
+- [ ] **Glass**: with a bright, busy wallpaper or window behind the board, cards still read easily. With System Settings › Accessibility › Display › Reduce transparency on, the board is solid paper.
+- [ ] **Columns**: short notes get short cards. Accepting one card doesn't send the others hopping between columns. Arrow keys move up and down a column, and left and right to the card beside.
+- [ ] **Flying notes**: **Move to …** sends the card into its sidebar folder, and the count ticks up as it lands. It never blocks the next click. With Reduce motion on, notes just move.
+- [ ] **Streaming**: on a big Inbox the top cards get their suggestions first, and the header says "sorting…" until all are done.
 - [ ] **Text size**: Extra large still fits titles and buttons on cards.
 - [ ] **VoiceOver** (⌘F5): cards read as title, body and age, and **Move to …** is reachable.
 - [ ] **Finder**: rename a note's first line, and its file name follows. Edit a file in TextEdit, switch back, and the card updates.

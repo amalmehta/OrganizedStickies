@@ -24,8 +24,9 @@ OrganizedStickies/
 │   │   ├── LibraryLoader.swift      Reads ~/Documents/Organized Stickies into a Library
 │   │   ├── NoteDisk.swift           Actor that applies DiskOps in order (write, rename, move, trash)
 │   │   ├── NoteNaming.swift         Titles and safe, readable file names
-│   │   ├── Sorter.swift             Folder suggestions: word overlap + on-device meaning vectors
-│   │   ├── TextAnalysis.swift       Word lemmas, stopwords, TF-IDF vectors
+│   │   ├── ColumnPacking.swift      Which column each card goes in (shortest first, kept while you work)
+│   │   ├── Sorter.swift             Folder suggestions: word overlap + on-device meaning vectors, streamed in batches
+│   │   ├── TextAnalysis.swift       Word lemmas (reused taggers, remembered per note), stopwords, TF-IDF vectors
 │   │   ├── Staleness.swift          "Untouched for N days" and age labels
 │   │   ├── StickiesImporter.swift   Reads Apple Stickies' .rtfd notes (read only)
 │   │   ├── SampleData.swift         Loads/writes the sample notes

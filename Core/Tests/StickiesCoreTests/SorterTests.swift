@@ -81,3 +81,63 @@ struct NoEmbedder: SentenceEmbedder {
         #expect(!t.contains("the"))
     }
 }
+
+@Suite struct StreamingSorterTests {
+    @Test func batchesGiveTheSameAnswersInOrder() throws {
+        let sample = try SampleSet.load()
+        let candidates = sample.folders.map { SortCandidate(name: $0.name, notes: $0.notes.map(\.text)) }
+        let notes = sample.inbox.map { (id: UUID(), text: $0.text) }
+        let sorter = Sorter(embedder: AppleSentenceEmbedder())
+        let whole = sorter.suggest(notes: notes, folders: candidates)
+        var streamed: [UUID: SortOutcome] = [:]
+        var order: [UUID] = []
+        sorter.suggest(notes: notes, folders: candidates, batchSize: 5) { batch in
+            #expect(batch.count <= 5)
+            order += notes.map(\.id).filter { batch[$0] != nil }
+            streamed.merge(batch) { _, new in new }
+        }
+        // Same decisions; scores can differ in the last bits because word
+        // weights are summed in dictionary order.
+        #expect(streamed.count == whole.count)
+        for (id, w) in whole {
+            switch (w, streamed[id]) {
+            case let (.suggest(f1, s1, r1), .suggest(f2, s2, r2)?):
+                #expect(f1 == f2)
+                #expect(r1 == r2)
+                #expect(abs(s1 - s2) < 1e-9)
+            case let (.noClearMatch(r1), .noClearMatch(r2)?):
+                #expect(r1 == r2)
+            default:
+                Issue.record("outcome differs for a note")
+            }
+        }
+        #expect(order == notes.map(\.id), "batches arrive top to bottom")
+    }
+
+    /// A stand-in model that takes a fixed time per text, so the test
+    /// measures the batching, not the machine's load.
+    struct SlowFakeEmbedder: SentenceEmbedder {
+        func vector(for text: String) -> [Double]? {
+            Thread.sleep(forTimeInterval: 0.005)
+            var h = Hasher(); h.combine(text)
+            let seed = UInt64(bitPattern: Int64(h.finalize()))
+            return (0..<16).map { Double((seed >> UInt64($0 * 4)) & 0xF) - 7.5 }
+        }
+    }
+
+    /// The first cards get their suggestion while the rest are still being
+    /// worked out. With the fake model each note costs 5 ms, so the gap
+    /// between the first and last batch is at least the 188 notes after the
+    /// first batch × 5 ms, whatever else the Mac is doing.
+    @Test func firstBatchArrivesLongBeforeTheLast() throws {
+        let sample = try SampleSet.load()
+        let candidates = sample.folders.map { SortCandidate(name: $0.name, notes: $0.notes.map(\.text)) }
+        let notes = (0..<200).map { i in (id: UUID(), text: sample.inbox[i % sample.inbox.count].text + " \(i)") }
+        let sorter = Sorter(embedder: SlowFakeEmbedder())
+        var times: [UInt64] = []
+        sorter.suggest(notes: notes, folders: candidates, batchSize: 12) { _ in times.append(DispatchTime.now().uptimeNanoseconds) }
+        #expect(times.count == 17)
+        let gap = Double((times.last ?? 0) - (times.first ?? 0)) / 1e6
+        #expect(gap >= 188 * 5 * 0.95, "first and last batch \(gap) ms apart")
+    }
+}

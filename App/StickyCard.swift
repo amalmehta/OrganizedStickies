@@ -7,6 +7,8 @@ struct StickyCard: View {
     let note: Note
     let folder: Folder
     var showFolder = false
+    /// Called after notes are dropped onto this card (they now sit before it).
+    var onDropBefore: ([Note.ID]) -> Void = { _ in }
     @FocusState private var editorFocused: Bool
     @State private var isTargeted = false
     @State private var hovering = false
@@ -24,8 +26,8 @@ struct StickyCard: View {
             footer
         }
         .padding(14)
+        // As tall as its text: short notes make short cards.
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(height: 200 * scale)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Theme.paper(folder.color))
@@ -45,6 +47,7 @@ struct StickyCard: View {
         .dropDestination(for: String.self) { items, _ in
             let ids = items.compactMap(NoteDragID.parse)
             for id in ids { board.reorder(id, before: note.id) }
+            onDropBefore(ids)
             return !ids.isEmpty
         } isTargeted: { isTargeted = $0 }
         .contextMenu { menu }
@@ -63,6 +66,8 @@ struct StickyCard: View {
             Button("Move to Trash") { board.delete(note.id) }
         }
         .accessibilityIdentifier("note-\(note.title)")
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { board.frames.cards[note.id] = $0 }
+        .onDisappear { board.frames.cards[note.id] = nil }
     }
 
     // MARK: Parts
@@ -82,6 +87,7 @@ struct StickyCard: View {
                 if !focused && board.editingNoteID == note.id { board.endEditing() }
             }
             .padding(.horizontal, -5)
+            .frame(height: 240 * scale)
             .accessibilityLabel("Note text")
             .accessibilityIdentifier("noteEditor")
     }
@@ -97,11 +103,11 @@ struct StickyCard: View {
                     .font(Theme.bodyFont(scale))
                     .foregroundStyle(Theme.ink.opacity(0.82))
                     .lineSpacing(2)
+                    .lineLimit(CardHeight.bodyLines)
             }
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .clipped()
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
@@ -230,5 +236,30 @@ private struct DraggableUnlessEditing: ViewModifier {
                     .background(Theme.paper(color), in: RoundedRectangle(cornerRadius: 8))
             }
         }
+    }
+}
+
+/// A quick guess at a card's height from its text, used only to decide which
+/// column it goes in (the card itself is always as tall as its text). Close
+/// enough that columns end at about the same place.
+enum CardHeight {
+    static let bodyLines = 8
+
+    static func estimate(_ note: Note, width: CGFloat, scale: Double, hasFooterNote: Bool) -> Double {
+        let textWidth = max(60, Double(width) - 28)
+        func lines<S: StringProtocol>(_ s: S, charWidth: Double) -> Int {
+            max(1, Int((Double(s.count) * charWidth * scale / textWidth).rounded(.up)))
+        }
+        let title = min(2, lines(note.title.isEmpty ? "Untitled" : note.title, charWidth: 8.4))
+        var body = 0
+        if !note.body.isEmpty {
+            for paragraph in note.body.split(separator: "\n", omittingEmptySubsequences: false) {
+                body += lines(paragraph, charWidth: 6.9)
+                if body >= bodyLines { break }
+            }
+            body = min(bodyLines, body)
+        }
+        let footer = hasFooterNote ? 56.0 : 18.0
+        return (28 + Double(title) * 19 + (body > 0 ? 6 + Double(body) * 17.5 : 0) + 10 + footer) * scale
     }
 }

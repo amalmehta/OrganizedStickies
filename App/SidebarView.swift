@@ -100,14 +100,25 @@ struct FolderRow: View {
                     .foregroundStyle(Theme.quiet)
                     .help("\(stale) \(stale == 1 ? "note" : "notes") untouched for \(board.staleDays)+ days")
             }
-            if !folder.notes.isEmpty {
-                Text("\(folder.notes.count)")
+            let shown = board.shownCount(folder)
+            if shown > 0 {
+                Text("\(shown)")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(Theme.quiet)
+                    .contentTransition(.numericText())
+                    .animation(.snappy, value: shown)
             }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+        // A small bounce when a flying card lands here.
+        .keyframeAnimator(initialValue: 1.0, trigger: board.landings[folder.name] ?? 0) { row, scale in
+            row.scaleEffect(scale, anchor: .leading)
+        } keyframes: { _ in
+            SpringKeyframe(1.06, duration: 0.12)
+            SpringKeyframe(1.0, duration: 0.3)
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { board.frames.folders[folder.name] = $0 }
         .background(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.accent, lineWidth: isTargeted ? 2 : 0).padding(-4))
         .dropDestination(for: String.self) { items, _ in
             let ids = items.compactMap(NoteDragID.parse)

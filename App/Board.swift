@@ -18,6 +18,13 @@ final class Board {
     var dismissedStale: Set<Note.ID> = []
     var errorMessage: String?
     var renamingFolderID: Folder.ID?
+    /// Ghost cards on their way to a folder after you accept a suggestion.
+    private(set) var flights: [Flight] = []
+    /// Counts notes landing in each folder, so its row can give a small bounce.
+    private(set) var landings: [String: Int] = [:]
+    /// Where cards and folder rows are on screen, for the flights. Not
+    /// observed: it changes on every scroll and nothing needs to redraw.
+    let frames = FrameBook()
 
     let root: URL
     let isDemo: Bool
@@ -25,6 +32,7 @@ final class Board {
     private let jobs: AsyncStream<Job>.Continuation
     private var saveTasks: [Note.ID: Task<Void, Never>] = [:]
     private var sortTask: Task<Void, Never>?
+    private var sortJob: Task<Void, Never>?
     private let embedder = AppleSentenceEmbedder()
 
     private enum Job: Sendable {
@@ -40,6 +48,10 @@ final class Board {
         self.disk = disk
         let (stream, continuation) = AsyncStream<Job>.makeStream()
         jobs = continuation
+        // Load the language data now, while the board appears, so the first
+        // sort doesn't spend its first second or two on it.
+        let embedder = embedder
+        Task.detached(priority: .utility) { Sorter.warmUp(embedder) }
         Task.detached(priority: .userInitiated) { [weak self] in
             for await job in stream {
                 switch job {
@@ -293,6 +305,7 @@ final class Board {
     /// Recompute Inbox suggestions shortly after things settle.
     func scheduleSort() {
         sortTask?.cancel()
+        sortJob?.cancel()
         sortTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
@@ -305,28 +318,66 @@ final class Board {
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { (id: $0.id, text: $0.text) }
         let candidates = library.userFolders.map { SortCandidate(name: $0.name, notes: $0.notes.map(\.text)) }
-        guard !notes.isEmpty else { suggestions = [:]; return }
+        guard !notes.isEmpty else { suggestions = [:]; isSorting = false; return }
         let config = SorterConfig.standard.shifted(by: strictness)
         let embedder = embedder
         isSorting = true
-        let result = await Task.detached(priority: .userInitiated) {
-            Sorter(config: config, embedder: embedder).suggest(notes: notes, folders: candidates)
-        }.value
+        // Suggestions arrive a dozen notes at a time, top of the Inbox first,
+        // so the cards you see fill in while the rest are worked out. Old
+        // suggestions stay until their note's new one arrives: no flicker.
+        let (batches, sink) = AsyncStream<[Note.ID: SortOutcome]>.makeStream()
+        let job = Task.detached(priority: .userInitiated) {
+            Sorter(config: config, embedder: embedder).suggest(notes: notes, folders: candidates) { sink.yield($0) }
+            sink.finish()
+        }
+        sortJob = job
+        for await batch in batches {
+            guard !Task.isCancelled else { return }
+            suggestions.merge(batch) { _, new in new }
+        }
         guard !Task.isCancelled else { return }
-        suggestions = result
+        let current = Set(notes.map(\.id))
+        suggestions = suggestions.filter { current.contains($0.key) }
         isSorting = false
     }
 
     func acceptSuggestion(_ id: Note.ID) {
         guard let name = suggestion(for: library.note(id) ?? Note(fileName: "", text: "", modified: .now))?.folder else { return }
+        fly(id, to: name)
         move(id, toFolderNamed: name)
     }
 
     func acceptAllSuggestions() {
-        for (id, name) in suggestedMoves { move(id, toFolderNamed: name) }
+        let moves = suggestedMoves
+        for (i, (id, name)) in moves.enumerated() { fly(id, to: name, delay: Double(min(i, 12)) * 0.03) }
+        for (id, name) in moves { move(id, toFolderNamed: name) }
+    }
+
+    /// Sends a ghost of the card to its folder row, so you see where it went.
+    /// Only for cards on screen, and never with Reduce Motion on.
+    private func fly(_ id: Note.ID, to folderName: String, delay: Double = 0) {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let from = frames.cards[id], from.intersects(frames.board),
+              let to = frames.folders[folderName],
+              let note = library.note(id), let source = library.folderOf(note: id),
+              let target = library.folder(named: folderName) else { return }
+        let flight = Flight(folder: folderName, from: from, to: to, title: note.title.isEmpty ? "Untitled" : note.title,
+                            fromColor: source.color, toColor: target.color, delay: delay)
+        flights.append(flight)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Flight.duration + delay))
+            self?.landings[folderName, default: 0] += 1
+            self?.flights.removeAll { $0.id == flight.id }
+        }
     }
 
     func dismissSuggestion(_ id: Note.ID) { dismissedSuggestions.insert(id) }
+
+    /// Notes in a folder minus cards still flying there, so the sidebar count
+    /// ticks up as each one lands.
+    func shownCount(_ folder: Folder) -> Int {
+        folder.notes.count - flights.filter { $0.folder == folder.name }.count
+    }
 
     // MARK: Import and samples
 
@@ -361,4 +412,25 @@ final class Board {
         let url = folder.map { root.appendingPathComponent($0.name, isDirectory: true) } ?? root
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
+}
+
+/// A card on its way to a folder row.
+struct Flight: Identifiable {
+    static let duration = 0.3
+    let id = UUID()
+    let folder: String
+    let from: CGRect
+    let to: CGRect
+    let title: String
+    let fromColor: FolderColor
+    let toColor: FolderColor
+    let delay: Double
+}
+
+/// Window positions of cards, folder rows and the visible board, in global
+/// coordinates. Plain storage, deliberately not observed.
+@MainActor final class FrameBook {
+    var cards: [Note.ID: CGRect] = [:]
+    var folders: [String: CGRect] = [:]
+    var board: CGRect = .zero
 }
