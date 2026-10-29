@@ -11,7 +11,7 @@ Sticky notes for the Mac that live in folders on one board instead of scattered 
 <img src="docs/images/folder.png" width="49%" alt="A folder with an untouched note offering Archive">
 </p>
 
-- **One board, one folder at a time.** Inbox, your folders, Archive, on frosted glass that lets your desktop show through. Each card is as tall as its note. Each note is a plain Markdown file in `~/Documents/Organized Stickies/`.
+- **One board, one folder at a time.** Inbox, your folders, Archive, on glass that lets your desktop show through. Each card is as tall as its note. Each note is a plain Markdown file in `~/Documents/Organized Stickies/`.
 - **Suggestions, never auto-moves.** On held-out sample notes, all 10 suggestions shown were right, and 9 of 12 longer notes got one ([evaluation](docs/SORTER-EVAL.md)). Short notes usually get "No clear match", by design.
 - **Stale notes surface.** Anything untouched for 14 days or more offers **Archive**.
 - **Private and free.** Sorting runs on your Mac with Apple's NaturalLanguage framework. No account, no network.

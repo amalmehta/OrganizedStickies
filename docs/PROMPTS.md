@@ -19,3 +19,10 @@
    → Asked for the app's exact wording. Still open.
 5. "find 10 more things to make this sexy smooth / make the background translucent so it feels "one" with the computer"
    → Pushed back on what glass costs (the board's color follows what's behind it). Built a frosted-glass board, proposed ten changes, and asked which to build. Answers: glass "More see-through"; build cards that fit their text, notes that fly to their folder, and suggestions that appear note by note. While measuring, found word analysis made a new tagger per note: reusing them is about 13× faster.
+
+## 2026-10-28 — Making the glass real
+
+1. "it should feel translucent in the backend ... i.e. "one with the computer""
+   → Built a capture made of only the app window and a striped stand-in wallpaper, and found the board let nothing through: every older frosted material draws as flat grey on macOS 26, and earlier window-only captures couldn't have shown it. Moved the whole window to Liquid Glass over a see-through window, and checked light and dark over the stripes.
+2. "yeah its better" / "but the sticky should be a bit more oqaue"
+   → Cards were already solid, so took it to mean the glass: doubled the paper wash over it (15% → 30%) and rechecked light and dark.

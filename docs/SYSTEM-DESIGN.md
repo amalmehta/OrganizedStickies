@@ -1,6 +1,6 @@
 # System Design
 
-Organized Stickies is one Mac window, a backboard of frosted glass. Folders sit
+Organized Stickies is one Mac window, a backboard of Liquid Glass that lets the desktop show through. Folders sit
 in the sidebar, and the chosen folder's notes sit in staggered columns, each
 card as tall as its text. Every note is a plain Markdown file in a real Finder
 folder. Sorting suggestions run on this Mac.
@@ -123,7 +123,7 @@ Why not an LLM? It would be more accurate on short notes, but it costs money, ne
 | Suggest, never auto-move | A wrong automatic move costs more trust than a missed suggestion. | One click per note. |
 | Unsandboxed local build | Needs to read Apple Stickies' container and ~/Documents. | Gatekeeper warns on other Macs. Not App Store ready. |
 | System serif (New York) + SF | No font downloads or licensing work. | Not exactly Newsreader/Inter (bundling them is a proposal). |
-| Frosted glass board, solid paper cards | You asked for the window to feel part of the desktop. Cards stay solid so text reads the same over any background. | The board's color shifts with what's behind it. It stays frosted when the window isn't in front, unlike most Mac apps. Reduce Transparency gives solid paper. |
+| Liquid Glass window, solid paper cards | You asked for the window to feel part of the desktop. The older frosted materials (NSVisualEffectView) draw as flat grey on macOS 26, so the window is see-through with an `NSGlassEffectView` behind everything. Cards stay solid so text reads the same over any background. | The board's color shifts with what's behind it, and a loud wallpaper makes the board loud. It stays glass when the window isn't in front, unlike most Mac apps. Reduce Transparency gives solid paper. |
 | Columns that keep their cards | Short notes get short cards, with no blank paper. Keeping each card's column stops cards jumping when one leaves. | After many moves, columns can end at different heights. They even out when you switch folders or resize the window. Reading order runs across columns, so the newest note isn't always top-left. |
 
 ## Scale and what would change

@@ -22,7 +22,6 @@ struct BoardView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { Backdrop().ignoresSafeArea() }
     }
 
     @ViewBuilder

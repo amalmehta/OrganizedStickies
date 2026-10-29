@@ -94,35 +94,35 @@ extension FolderKind {
     }
 }
 
-/// The board's backdrop: frosted glass that picks up the desktop behind the
-/// window, with a thin wash of paper so it stays warm and the cards read.
-/// Stays frosted when the window is in the background, so it never flips to grey.
+/// The window's backdrop: Liquid Glass that lets the desktop show through
+/// the whole window (board, toolbar and around the sidebar), with a thin wash
+/// of paper so it stays warm and the cards read. The older frosted materials
+/// draw as flat grey on macOS 26, so they can't do this.
 /// Solid paper when Reduce Transparency is on.
 struct Backdrop: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var tint = Theme.window
-    var wash = 0.15
+    var wash = 0.3
 
     var body: some View {
         if reduceTransparency {
             tint
         } else {
             ZStack {
-                BehindWindowGlass()
+                WindowGlass()
                 tint.opacity(wash)
             }
         }
     }
 }
 
-private struct BehindWindowGlass: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .underWindowBackground
-        v.blendingMode = .behindWindow
-        v.state = .active
+private struct WindowGlass: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSGlassEffectView {
+        let v = NSGlassEffectView()
+        v.style = .regular
+        v.cornerRadius = 0
         return v
     }
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ nsView: NSGlassEffectView, context: Context) {}
 }

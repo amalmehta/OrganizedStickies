@@ -22,6 +22,8 @@ struct ContentView: View {
                 .accessibilityIdentifier("newNoteButton")
             }
         }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .background { Backdrop().ignoresSafeArea() }
         .overlay { FlightLayer().ignoresSafeArea() }
         .overlay(alignment: .bottom) {
             if let message = board.errorMessage {

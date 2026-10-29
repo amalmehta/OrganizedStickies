@@ -377,6 +377,12 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
   columns, an accepted note flies to its folder and the count ticks up as it
   lands, and suggestions appear a dozen notes at a time instead of all at the
   end.
+- Changed 2026-10-28, at my request ("it should feel translucent in the
+  backend"): v1.1's frosted board drew as flat grey on macOS 26, because the
+  older frosted materials no longer let anything through. The whole window
+  (board, toolbar strip, around the sidebar) is now Liquid Glass over a
+  see-through window, with solid cards. After trying it: "a bit more
+  opaque", so the paper wash over the glass went from 15% to 30%.
 - Delivery: local build for macOS 26 or later, signed for this Mac only, in
   /Applications. Code goes to a public GitHub repo, amalmehta/OrganizedStickies.
 - Measured on my real Apple Stickies (word counts only, no text read): 25 notes,
@@ -494,3 +500,4 @@ CHANGELOG:
 - 2026-10-26 — recorded design decisions, definitions, deferred list and assumptions from the first question rounds
 - 2026-10-26 — built v1.0: board app, on-device sorter (fitted and evaluated on sample notes), importer, settings, feedback, icon, tests and docs
 - 2026-10-27 — v1.1: glass backboard, cards that fit their text, notes that fly to their folder, suggestions that stream in; word analysis about 13× faster (taggers reused); recorded the six smoothness proposals not picked
+- 2026-10-28 — v1.1.1: the whole window is Liquid Glass, so the desktop really shows through (v1.1's frosted board drew as flat grey on macOS 26)

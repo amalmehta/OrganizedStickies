@@ -80,6 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         w.title = board.isDemo ? "Organized Stickies (Demo)" : "Organized Stickies"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         w.toolbarStyle = .unified
+        // See-through, so the glass backdrop shows the desktop behind the window.
+        w.titlebarAppearsTransparent = true
+        w.isOpaque = false
+        w.backgroundColor = .clear
         w.isReleasedWhenClosed = false
         w.contentMinSize = NSSize(width: 640, height: 420)
         w.setContentSize(NSSize(width: 1080, height: 720))
