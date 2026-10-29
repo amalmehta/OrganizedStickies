@@ -15,6 +15,11 @@ final class Board {
     private(set) var suggestions: [Note.ID: SortOutcome] = [:]
     private(set) var isSorting = false
     var dismissedSuggestions: Set<Note.ID> = []
+    /// Groups found in the Inbox while there are no folders of your own.
+    private var foundStarters: [StarterFolder] = []
+    private var dismissedStarters: Set<StarterFolder.ID> = []
+    /// "Not now" on the starter folders, until the app quits.
+    private(set) var startersDismissed = false
     var dismissedStale: Set<Note.ID> = []
     var errorMessage: String?
     var renamingFolderID: Folder.ID?
@@ -34,6 +39,7 @@ final class Board {
     private var sortTask: Task<Void, Never>?
     private var sortJob: Task<Void, Never>?
     private let embedder = AppleSentenceEmbedder()
+    private let wordVectors = WordVectorEmbedder()
 
     private enum Job: Sendable {
         case ops([DiskOp])
@@ -50,8 +56,11 @@ final class Board {
         jobs = continuation
         // Load the language data now, while the board appears, so the first
         // sort doesn't spend its first second or two on it.
-        let embedder = embedder
-        Task.detached(priority: .utility) { Sorter.warmUp(embedder) }
+        let embedder = embedder, wordVectors = wordVectors
+        Task.detached(priority: .utility) {
+            Sorter.warmUp(embedder)
+            Sorter.warmUp(wordVectors)
+        }
         Task.detached(priority: .userInitiated) { [weak self] in
             for await job in stream {
                 switch job {
@@ -322,6 +331,15 @@ final class Board {
         let config = SorterConfig.standard.shifted(by: strictness)
         let embedder = embedder
         isSorting = true
+        if candidates.isEmpty && !startersDismissed {
+            // Nothing to sort into yet: look for groups that could be folders.
+            let words = wordVectors, taken = library.folders.map(\.name)
+            let found = await Task.detached(priority: .userInitiated) {
+                FolderFinder(embedder: words).propose(notes: notes, avoiding: taken)
+            }.value
+            guard !Task.isCancelled else { return }
+            foundStarters = found
+        }
         // Suggestions arrive a dozen notes at a time, top of the Inbox first,
         // so the cards you see fill in while the rest are worked out. Old
         // suggestions stay until their note's new one arrives: no flicker.
@@ -372,6 +390,44 @@ final class Board {
     }
 
     func dismissSuggestion(_ id: Note.ID) { dismissedSuggestions.insert(id) }
+
+    // MARK: Starter folders
+
+    /// Suggested folders still worth showing: notes that left the Inbox drop
+    /// out, and a group left with fewer than two notes goes.
+    var starterFolders: [StarterFolder] {
+        guard !startersDismissed else { return [] }
+        let inInbox = Set(library.inbox.notes.map(\.id))
+        return foundStarters.compactMap { s in
+            guard !dismissedStarters.contains(s.id) else { return nil }
+            var s = s
+            s.noteIDs = s.noteIDs.filter(inInbox.contains)
+            return s.noteIDs.count >= 2 ? s : nil
+        }
+    }
+
+    /// Makes a suggested folder and moves its notes in, each card flying to
+    /// the new folder's row.
+    func createStarterFolder(_ id: StarterFolder.ID, named name: String) {
+        guard let starter = starterFolders.first(where: { $0.id == id }) else { return }
+        endEditing()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let (folderID, ops) = library.createFolder(named: trimmed.isEmpty ? starter.name : trimmed)
+        apply(ops)
+        dismissedStarters.insert(id)
+        guard let folderName = library.folder(folderID)?.name else { return }
+        Task { [weak self] in
+            // Let the new row appear first, so the cards have somewhere to fly.
+            try? await Task.sleep(for: .milliseconds(120))
+            guard let self else { return }
+            for (i, note) in starter.noteIDs.enumerated() { fly(note, to: folderName, delay: Double(min(i, 12)) * 0.03) }
+            for note in starter.noteIDs where library.folderOf(note: note)?.kind == .inbox { move(note, to: folderID) }
+        }
+    }
+
+    func dismissStarterFolder(_ id: StarterFolder.ID) { dismissedStarters.insert(id) }
+
+    func dismissStarterFolders() { startersDismissed = true }
 
     /// Notes in a folder minus cards still flying there, so the sidebar count
     /// ticks up as each one lands.

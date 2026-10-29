@@ -52,6 +52,26 @@ public enum TextAnalysis {
         return out
     }
 
+    /// Terms that are nouns somewhere in these texts, for naming a folder
+    /// after a thing ("Friction") rather than a word like "whether".
+    public static func nounTerms(_ texts: [String]) -> Set<String> {
+        let tagger = NLTagger(tagSchemes: [.lexicalClass, .lemma])
+        var out: Set<String> = []
+        for text in texts {
+            tagger.string = text
+            tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .lexicalClass,
+                                 options: [.omitPunctuation, .omitWhitespace, .omitOther]) { tag, range in
+                guard tag == .noun || tag == .personalName || tag == .placeName || tag == .organizationName else { return true }
+                let word = String(text[range]).lowercased()
+                let lemma = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0?.rawValue.lowercased() ?? ""
+                out.insert(word)
+                if !lemma.isEmpty { out.insert(lemma) }
+                return true
+            }
+        }
+        return out
+    }
+
     private static let taggers = TaggerPool()
     private static let cache = TermsCache()
 

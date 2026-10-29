@@ -18,6 +18,7 @@ flowchart LR
     Loader[LibraryLoader]
     Disk["NoteDisk (actor)<br/>runs DiskOps in order"]
     Sorter["Sorter<br/>TF-IDF + sentence vectors"]
+    Finder["FolderFinder<br/>TF-IDF + word vectors"]
     Stale[Staleness]
     Importer[StickiesImporter]
     Packing[ColumnPacking]
@@ -30,6 +31,7 @@ flowchart LR
   Board -- DiskOps --> Disk --> FS
   Board -- background --> Loader --> FS
   Board -- background --> Sorter --> NL
+  Board -- background --> Finder --> NL
   Board --> Stale
   UI --> Packing
   Board -- background --> Importer --> AS
@@ -41,6 +43,7 @@ flowchart LR
 | **NoteDisk** | An actor that runs `DiskOp`s one at a time, off the main thread: write, rename, move, move to Trash, make or rename a folder, save the index. |
 | **LibraryLoader** | Reads the root folder into a `Library`. Creates Inbox and Archive if they're missing. Notes the index doesn't know about (added in Finder) go first, newest first, so you notice them. |
 | **Sorter** | Suggests a folder for each Inbox note, or says "No clear match". Explains why. |
+| **FolderFinder** | With no folders of your own yet, groups Inbox notes that share words and meaning, and drafts a name for each group. The Inbox offers them as folders to start with. |
 | **Staleness** | Decides which notes have been untouched for N days or more. |
 | **StickiesImporter** | Copies Apple Stickies' notes (`.rtfd` packages) as plain text. Read only. |
 | **ColumnPacking** | Puts cards of different heights into columns, each card into the shortest column so far. Cards keep their column while you work, so moving one out doesn't send the rest hopping. |
@@ -54,8 +57,9 @@ flowchart LR
 3. **Move or reorder**: drag a card onto a sidebar folder (move), or onto another card (reorder). The UI updates at once; `DiskOp.move` and `saveIndex` follow in the background.
 4. **Sort Inbox**: the Board takes a snapshot of the texts, then the Sorter runs on a background task and hands back results a dozen notes at a time, top of the Inbox first. Each card's chip appears as soon as its batch is done: **Move to Robotics**, with a reason line. You accept or dismiss each one. Nothing moves without a click.
 5. **Accept**: the card's ghost flies from where it sat to its folder row in the sidebar (300 ms), and the folder's count ticks up as it lands. Only cards on screen fly, and nothing flies with Reduce Motion on. The move itself happens at once; the flight is only a picture of it.
-6. **Stale**: a note untouched for N days or more (not in Archive) shows **Archive?** with its age.
-7. **Import**: in Settings, Import from Apple Stickies copies every note into Inbox, keeping each note's original edit date. IDs already imported are remembered, so running it twice doesn't duplicate notes.
+6. **Stale**: a note untouched for N days or more (not in Archive) shows **Archive** with its age. On an Inbox card a folder suggestion comes first (filing beats archiving), but the Archive offer replaces "No clear match". Before 2026-10-29 every Inbox note's sorting result hid the offer, so old notes in the Inbox, where they pile up, never showed it.
+7. **Starter folders**: while you have no folders of your own, each sort also runs `FolderFinder` on the Inbox. Groups of 3 or more appear above the cards under **Folders to start with**, each with a draft name you can change, what its notes share, and a few titles. **Make Folder with N Notes** creates the folder and moves the notes in, each card flying to the new row. **×** drops one group; **Not Now** hides them until the app quits.
+8. **Import**: in Settings, Import from Apple Stickies copies every note into Inbox, keeping each note's original edit date. IDs already imported are remembered, so running it twice doesn't duplicate notes.
 
 ## Where data lives
 
@@ -110,6 +114,42 @@ What this shows: on its own, Apple's meaning model blurs the three research fold
 
 **Streaming, and where the time goes.** Word weights (IDF) need every note's words before any note can be scored, so that part runs first; the meaning vectors, the slow part, then run a dozen notes at a time. A note's answer is the same whichever batch it lands in (tested). Finding each word's dictionary form uses Apple's `NLTagger`; making a tagger costs far more than using one, so taggers are now reused and each note's words are remembered. Measured on 200 notes: 2.4 s with a new tagger per note, 0.19 s reused. Spreading the tagging over cores was slower (2.1 s), because every core needs its own tagger. The first use in a session still loads macOS's language data, so the app warms it up in the background at launch.
 
+## Starter folders
+
+The sorter needs folders with notes in them: it compares each Inbox note with what's already filed. With no folders, it has nothing to compare with, and every card says "Make a folder first". Starter folders give it a start.
+
+**How groups are found.** Agglomerative clustering with average linkage. Every note starts as its own group. The two most similar groups join, again and again, until no two are similar enough (the **join threshold**). Two groups' similarity is the average over every pair of notes across them, so one stray look-alike can't drag a whole group in. Groups of fewer than 3 notes are dropped, since the sorter needs a few examples, and at most 6 are offered, biggest first.
+
+Two notes' similarity mixes the same two signals as the sorter, with one change:
+
+$$
+\text{sim}(a, b) = w \cdot \cos\big(\mathbf{t}_a, \mathbf{t}_b\big) + (1-w) \cdot \cos\big(\mathbf{u}_a - \bar{\mathbf{u}}, \mathbf{u}_b - \bar{\mathbf{u}}\big)
+$$
+
+- $\mathbf{t}_a$: the note's TF-IDF word vector, as above.
+- $\mathbf{u}_a$: the sum of Apple's on-device **word** vectors for the note's words (filler words dropped), scaled to length 1. Not the sentence vector the sorter uses: see below.
+- $\bar{\mathbf{u}}$: the average of those vectors over the notes being grouped. Subtracting it is called centering. These vectors all lean the same way, so any two notes look fairly alike; centering leaves what sets each note apart.
+- $w$: word weight, fitted at 0.7. Join threshold fitted at 0.1125. Both are estimates.
+
+**In plain words**: notes join a group when, on average, their rare words and their gist match the notes already in it.
+
+**Why word vectors, not the sentence model.** Comparing a note with a whole folder averages away noise; comparing one note with one note doesn't. Measured as AUC (the chance that two notes from the same folder look more alike than two from different folders; 0.5 is a coin flip), on meaning alone Apple's sentence model scored 0.60 on the sample notes, its contextual (transformer) embedding 0.65 and summed word vectors 0.74 (a throwaway probe on 2026-10-29, not in the repo). Mixed with word overlap as shipped, sentence vectors score 0.63 and word vectors 0.73 ([SORTER-EVAL.md](SORTER-EVAL.md)). With the sentence model, the best fit on the tuning pile grouped a third of the notes, and on the held-out pile only 1 of the 4 notes it grouped was right. Apple's on-device language model (Foundation Models) could group and name notes far better, but this Mac reports it as not eligible, so it isn't an option yet.
+
+**Naming.** The group's words that are common inside it and rare elsewhere, nouns first ("Sim", not "whether"), units and time words never ("Cup", "Month"). Written as the notes write it ("PPO", "RM"). Names are drafts: the panel asks you to rename before making the folder.
+
+**How well it does (estimates on invented notes).** Fitted to get at least 90% of grouped notes right on 70 tuning notes, then checked on 22 held-out notes, about the size of a first import:
+
+| | Tuning pile (70) | Held-out pile (22) | Everything (92) |
+|---|---|---|---|
+| Groups offered | 5 | 2 | 6 |
+| Grouped notes right | 93% (28/30) | 5/6 | 90% (37/41) |
+| Notes with a home that were grouped | 45% | 33% | 48% |
+| Real folders found | 5 of 6 | 2 of 6 | 5 of 6 |
+
+What this shows: the groups it offers are mostly right, and about a third to a half of notes land in one. On a 22-note pile, 5 of 6 right is consistent with a true rate anywhere from about 44% to 97% (Wilson 95% interval), so treat it as a sketch. What it doesn't do yet: make the sorter take off. With every suggested folder made, the sorter's suggestions for the notes left in Inbox were right 4 times out of 8 on the full pile (5 of 9 even with ideal names), well under the 90% bar. Notes whose topic has no folder yet get pulled toward the nearest one that exists. That's a limit of the sorter with young, small folders, and it shows up the same way with folders you make by hand.
+
+**Speed.** 250 notes take about 2.5 s in a release build once language data is loaded (the app loads it at launch), off the main thread. Each group remembers its most similar neighbour, so joining doesn't rescan every pair: about n² work instead of n³.
+
 Why not an LLM? It would be more accurate on short notes, but it costs money, needs a key, and sends note text off the Mac. It's deferred as a swappable `Sorter` implementation.
 
 ## Key decisions and trade-offs
@@ -124,6 +164,8 @@ Why not an LLM? It would be more accurate on short notes, but it costs money, ne
 | Unsandboxed local build | Needs to read Apple Stickies' container and ~/Documents. | Gatekeeper warns on other Macs. Not App Store ready. |
 | System serif (New York) + SF | No font downloads or licensing work. | Not exactly Newsreader/Inter (bundling them is a proposal). |
 | Liquid Glass window, solid paper cards | You asked for the window to feel part of the desktop. The older frosted materials (NSVisualEffectView) draw as flat grey on macOS 26, so the window is see-through with an `NSGlassEffectView` behind everything. Cards stay solid so text reads the same over any background. | The board's color shifts with what's behind it, and a loud wallpaper makes the board loud. It stays glass when the window isn't in front, unlike most Mac apps. Reduce Transparency gives solid paper. |
+| Starter folders only while you have no folders | That's when the sorter has nothing to work with, and the groups are a draft for you to name. | Once you have one folder, unfiled topics get no group suggestions; they wait for a folder you make. |
+| Folder suggestion before the stale offer on Inbox cards | Filing a note beats archiving it, and one footer row keeps cards quiet. | An old note with a confident suggestion shows only the suggestion; Archive stays one click away in its menu (⇧⌘E). |
 | Columns that keep their cards | Short notes get short cards, with no blank paper. Keeping each card's column stops cards jumping when one leaves. | After many moves, columns can end at different heights. They even out when you switch folders or resize the window. Reading order runs across columns, so the newest note isn't always top-left. |
 
 ## Scale and what would change
@@ -137,11 +179,11 @@ Sized for today: hundreds of notes, one Mac.
 
 ## Testing
 
-- `swift test` in `Core/` runs 45 unit tests: Library planning (create, rename on title change, collisions, move, reorder, trash, folders, import de-duplication), the disk round trip in a temp folder (case-only renames, Trash, external files, bad UTF-8, corrupt index, reload merge that keeps unsaved text), the importer (fixture `.rtfd` packages), staleness, the sorter (unit cases, the spec's done criterion on the held-out half, streamed batches giving the same answers in order, and batches spreading out over the run), column packing (tall cards, keeping columns when a card leaves, new cards to the shortest column) and performance budgets (edits on a 500-note folder < 16 ms, loading 1,000 notes < 1 s, sorting 200 notes < 10 s).
-- `swift run sorter-eval` re-fits and re-reports the sorter against baselines.
-- An XCUITest target drives the main flows in demo mode (`-demo` opens a temporary copy of the sample notes): writing a note, accepting suggestions, making and renaming a folder, search, keyboard move, quitting mid-typing (the text survives), Settings and the feedback sheet. 7 tests.
+- `swift test` in `Core/` runs 53 unit tests: Library planning (create, rename on title change, collisions, move, reorder, trash, folders, import de-duplication), the disk round trip in a temp folder (case-only renames, Trash, external files, bad UTF-8, corrupt index, reload merge that keeps unsaved text), the importer (fixture `.rtfd` packages), staleness, the sorter (unit cases, the spec's done criterion on the held-out half, streamed batches giving the same answers in order, and batches spreading out over the run), column packing (tall cards, keeping columns when a card leaves, new cards to the shortest column), starter folders (groups by shared words, names with the notes' capitals, units never a name, taken names avoided, too few or blank notes give nothing, sensible groups on the sample) and performance budgets (edits on a 500-note folder < 16 ms, loading 1,000 notes < 1 s, sorting 200 notes < 10 s, starter folders for 250 notes < 10 s in a debug build). The performance tests run one at a time, so two heavy ones don't slow each other past their budgets.
+- `swift run sorter-eval` re-fits and re-reports the sorter against baselines, and the starter folders against the sample's real folders.
+- An XCUITest target drives the main flows in demo mode (`-demo` opens a temporary copy of the sample notes): writing a note, accepting suggestions, making and renaming a folder, search, keyboard move, quitting mid-typing (the text survives), Settings and the feedback sheet, making a starter folder from an unsorted Inbox, and an old Inbox note offering Archive. 9 tests.
 - A manual review checklist covers feel, smoothness and real data: see `docs/INSTRUCTIONS.md`.
-- Launch options for testing and screenshots: `-demo` (temporary sample library), `-root <path>`, `-folder <name>`, `-search <text>`, `-appearance light|dark`.
+- Launch options for testing and screenshots: `-demo` (temporary sample library), `-demo -unsorted` (every sample note in Inbox, no folders, like a first import), `-root <path>`, `-folder <name>`, `-search <text>`, `-appearance light|dark`.
 - UI-test lessons: XCUITest on this setup stalls on `NSPredicate` queries over element labels and titles, so the tests check for elements that appear or disappear (`waitForExistence`) instead.
 
 ## Known limits

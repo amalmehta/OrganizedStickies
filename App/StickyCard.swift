@@ -110,45 +110,39 @@ struct StickyCard: View {
         .padding(.bottom, 4)
     }
 
+    /// One footer row per card. A folder suggestion comes first (filing beats
+    /// archiving), then the stale offer, then "No clear match". Old Inbox
+    /// notes would otherwise never offer Archive, since every one gets a
+    /// sorting result.
     @ViewBuilder
     private var footer: some View {
-        if !isEditing, let outcome = board.suggestion(for: note) {
-            switch outcome {
-            case let .suggest(name, _, reason):
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Button { board.acceptSuggestion(note.id) } label: {
-                            Label("Move to \(name)", systemImage: "arrow.right")
-                                .lineLimit(1)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(Theme.accent)
-                        .help("Move this note to \(name) (⌘Y)")
-                        .accessibilityIdentifier("acceptSuggestion")
-                        Button { board.dismissSuggestion(note.id) } label: {
-                            Image(systemName: "xmark")
-                        }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                        .foregroundStyle(Theme.quiet)
-                        .help("Not there. Keep it in Inbox.")
-                        .accessibilityLabel("Dismiss suggestion")
+        let outcome = isEditing ? nil : board.suggestion(for: note)
+        if case let .suggest(name, _, reason)? = outcome {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Button { board.acceptSuggestion(note.id) } label: {
+                        Label("Move to \(name)", systemImage: "arrow.right")
+                            .lineLimit(1)
                     }
-                    Text(reason)
-                        .font(Theme.smallFont(scale))
-                        .foregroundStyle(Theme.quiet)
-                        .lineLimit(2)
-                        .help(reason)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(Theme.accent)
+                    .help("Move this note to \(name) (⌘Y)")
+                    .accessibilityIdentifier("acceptSuggestion")
+                    Button { board.dismissSuggestion(note.id) } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundStyle(Theme.quiet)
+                    .help("Not there. Keep it in Inbox.")
+                    .accessibilityLabel("Dismiss suggestion")
                 }
-            case let .noClearMatch(reason):
-                VStack(alignment: .leading, spacing: 2) {
-                    Label("No clear match", systemImage: "questionmark.folder")
-                    Text(reason).lineLimit(2).opacity(0.85)
-                }
-                .font(Theme.smallFont(scale))
-                .foregroundStyle(Theme.quiet)
-                .help(reason)
+                Text(reason)
+                    .font(Theme.smallFont(scale))
+                    .foregroundStyle(Theme.quiet)
+                    .lineLimit(2)
+                    .help(reason)
             }
         } else if !isEditing, board.isStale(note, in: folder) {
             HStack(spacing: 6) {
@@ -168,6 +162,14 @@ struct StickyCard: View {
                     .help("Keep it here")
                     .accessibilityLabel("Keep note here")
             }
+        } else if case let .noClearMatch(reason)? = outcome {
+            VStack(alignment: .leading, spacing: 2) {
+                Label("No clear match", systemImage: "questionmark.folder")
+                Text(reason).lineLimit(2).opacity(0.85)
+            }
+            .font(Theme.smallFont(scale))
+            .foregroundStyle(Theme.quiet)
+            .help(reason)
         } else {
             HStack(spacing: 6) {
                 if showFolder {
@@ -212,7 +214,12 @@ struct StickyCard: View {
         if !note.body.isEmpty { parts.append(String(note.body.prefix(140))) }
         if showFolder { parts.append("in \(folder.name)") }
         parts.append("edited \(Staleness.ageLabel(note.modified))")
-        if case let .suggest(name, _, _)? = board.suggestion(for: note) { parts.append("suggested folder: \(name)") }
+        // Same order as the footer: a suggestion, else the stale offer.
+        if case let .suggest(name, _, _)? = board.suggestion(for: note) {
+            parts.append("suggested folder: \(name)")
+        } else if board.isStale(note, in: folder) {
+            parts.append("untouched for \(Staleness.ageLabel(note.modified).replacingOccurrences(of: " ago", with: "")), Archive offered")
+        }
         return parts.joined(separator: ". ")
     }
 }

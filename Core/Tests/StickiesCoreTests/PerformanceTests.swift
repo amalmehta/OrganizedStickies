@@ -4,7 +4,8 @@ import Testing
 
 /// Budgets at roughly 10× today's scale. Main-thread work (Library edits)
 /// must stay far under one 16 ms frame; background work must finish in seconds.
-@Suite struct PerformanceTests {
+/// One at a time, so two heavy tests don't slow each other and miss their budgets.
+@Suite(.serialized) struct PerformanceTests {
     func time(_ body: () throws -> Void) rethrows -> Double {
         let start = DispatchTime.now().uptimeNanoseconds
         try body()
@@ -57,5 +58,21 @@ import Testing
         #expect(out.count == 200)
         #expect(ms < 10_000, "sort \(ms) ms")
         print("perf: sorted 200 notes against 48 filed in \(Int(ms)) ms")
+    }
+
+    /// A big first import: 250 notes in Inbox, no folders yet. Language data
+    /// is loaded first, as the app does at launch.
+    @Test func findingStarterFoldersInTwoHundredFiftyNotesTakesSeconds() throws {
+        let sample = try SampleSet.load()
+        let texts = sample.folders.flatMap { $0.notes.map(\.text) } + sample.inbox.map(\.text)
+        let notes = (0..<250).map { i in (id: UUID(), text: texts[i % texts.count] + " \(i)") }
+        let words = WordVectorEmbedder()
+        Sorter.warmUp(words)
+        let finder = FolderFinder(embedder: words)
+        var out: [StarterFolder] = []
+        let ms = time { out = finder.propose(notes: notes) }
+        #expect(!out.isEmpty)
+        #expect(ms < 10_000, "starter folders \(ms) ms")
+        print("perf: starter folders for 250 notes in \(Int(ms)) ms")
     }
 }

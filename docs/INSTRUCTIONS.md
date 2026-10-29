@@ -16,7 +16,11 @@ Try it without touching your notes:
 open "/Applications/Organized Stickies.app" --args -demo
 ```
 
-Demo mode opens a fresh temporary copy of the sample notes on every launch.
+Demo mode opens a fresh temporary copy of the sample notes on every launch. Add `-unsorted` to start with every sample note in the Inbox and no folders, as after a first import:
+
+```bash
+open "/Applications/Organized Stickies.app" --args -demo -unsorted
+```
 
 ## Use
 
@@ -28,6 +32,7 @@ Demo mode opens a fresh temporary copy of the sample notes on every launch.
 | Switch folders | Click in the sidebar, or **⌘1**…**⌘9**. **Tab** moves from the sidebar into the board. |
 | File a note | Drag it onto a folder in the sidebar, or **⌥⌘1**…**⌥⌘9** (Note › Move To). |
 | Reorder | Drag a card onto another card. |
+| Start folders | With no folders of your own, the Inbox shows **Folders to start with**: groups of notes that share words and meaning. Rename one, then **Make Folder with N Notes** creates it and moves its notes in. **×** skips a group; **Not Now** hides them until you next open the app. |
 | Sort the Inbox | Suggestions appear by themselves on Inbox cards. **Move to …** accepts one (**⌘Y** for the selected note); **Move N Suggested** accepts all (**⇧⌘Y**); **×** dismisses. Nothing moves until you click. |
 | Archive | **Archive** on a stale note, **⇧⌘E**, or Note › Archive. |
 | Delete | **⌘⌫** or right-click › Move to Trash. The file goes to the Finder Trash, so you can get it back. |
@@ -58,7 +63,8 @@ Things tests can't judge. Check these after any visible change:
 - [ ] **Smoothness**: scrolling Inbox with 40+ cards holds the frame rate. Moving a card animates without a jump. Switching folders has no flicker.
 - [ ] **First open**: the welcome screen says what to do, and Import shows a clear result line.
 - [ ] **Real notes**: after importing your Apple Stickies, are the suggestions you see right? Count wrong ones. If more than about 1 in 10 are wrong, switch Settings › Sorting to Careful and tell me which ones.
-- [ ] **Stale**: does 14 days flag notes you'd actually archive?
+- [ ] **Stale**: does 14 days flag notes you'd actually archive? Old Inbox notes without a folder suggestion show **Archive** too.
+- [ ] **Starter folders**: right after importing (no folders yet), do the groups make sense, and do their draft names need much renaming? Count groups with a note that doesn't belong. After making them, are the suggestions for the remaining notes right?
 - [ ] **Dark mode**: cards, chips and the sidebar stay quiet and readable.
 - [ ] **Glass**: drag a colorful window behind the app: its colors show softly through the board, the toolbar strip and the sidebar, and cards still read easily. With System Settings › Accessibility › Display › Reduce transparency on, the board is solid paper.
 - [ ] **Columns**: short notes get short cards. Accepting one card doesn't send the others hopping between columns. Arrow keys move up and down a column, and left and right to the card beside.

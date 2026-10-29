@@ -26,3 +26,16 @@
    → Built a capture made of only the app window and a striped stand-in wallpaper, and found the board let nothing through: every older frosted material draws as flat grey on macOS 26, and earlier window-only captures couldn't have shown it. Moved the whole window to Liquid Glass over a see-through window, and checked light and dark over the stripes.
 2. "yeah its better" / "but the sticky should be a bit more oqaue"
    → Cards were already solid, so took it to mean the glass: doubled the paper wash over it (15% → 30%) and rechecked light and dark.
+3. "Review the uncommitted changes, commit them in sensible commits with clear messages, and push. Don't commit secrets or build output."
+   → The changes had already been committed as one commit; checked it for secrets and build output, ran the attribution checks, and pushed.
+4. "commit and push"
+   → Committed the new ProjectForge shortcut files and pushed.
+5. "the create new sticky button should be bigger"
+   → The toolbar sets the button's height, so it got wider instead: "New Note" now shows beside the icon. A larger control size changed nothing, so it was left out.
+
+## 2026-10-29 — Starter folders, and Archive for old Inbox notes
+
+1. "0,5,5"
+   → Looked at the app, the code and the real library (counts and dates only): 2 notes, no folders, nothing imported, while Apple Stickies had 8 notes edited this month. Listed 5 things to add and 5 to improve, ranked.
+2. "Build add #1 (suggested starter folders) and improve #1 (old Inbox notes get the Archive offer)."
+   → Built the Archive fix (suggestion first, then the stale offer, then "No clear match"). For starter folders, the first version grouped notes badly; measuring showed why: comparing two notes with the sentence model was barely better than a coin flip (AUC 0.55–0.60). Tried the contextual model (0.65), the on-device Apple Intelligence model (not available on this Mac) and summed word vectors (0.74), and built on word vectors. Fitted on 70 sample notes, checked on 22 held out: 5 of 6 grouped notes right there. Also measured, and reported, that the sorter's later suggestions into these young folders were right only about half the time.

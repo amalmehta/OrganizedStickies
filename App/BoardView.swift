@@ -67,30 +67,38 @@ struct BoardView: View {
                                          hasFooterNote: { folder.kind == .inbox || board.isStale($0, in: folder) })
             ScrollViewReader { proxy in
                 ScrollView {
-                    HStack(alignment: .top, spacing: Self.spacing) {
-                        ForEach(columns.indices, id: \.self) { c in
-                            LazyVStack(spacing: Self.spacing) {
-                                ForEach(columns[c]) { note in
-                                    StickyCard(note: note, folder: folder) { dropped in
-                                        for id in dropped { memory.put(id, inColumnOf: note.id) }
-                                    }
-                                    .id(note.id)
-                                    .accessibilitySortPriority(memory.readingPriority(note.id))
-                                    .transition(.scale(scale: 0.96).combined(with: .opacity))
-                                }
-                            }
-                            .frame(width: width)
+                    VStack(alignment: .leading, spacing: 18) {
+                        if folder.kind == .inbox && !board.starterFolders.isEmpty {
+                            StarterFoldersPanel()
+                                .transition(.opacity)
                         }
+                        HStack(alignment: .top, spacing: Self.spacing) {
+                            ForEach(columns.indices, id: \.self) { c in
+                                LazyVStack(spacing: Self.spacing) {
+                                    ForEach(columns[c]) { note in
+                                        StickyCard(note: note, folder: folder) { dropped in
+                                            for id in dropped { memory.put(id, inColumnOf: note.id) }
+                                        }
+                                        .id(note.id)
+                                        .accessibilitySortPriority(memory.readingPriority(note.id))
+                                        .transition(.scale(scale: 0.96).combined(with: .opacity))
+                                    }
+                                }
+                                .frame(width: width)
+                            }
+                        }
+                        // VoiceOver reads cards in board order, not column by column.
+                        .accessibilityElement(children: .contain)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    // VoiceOver reads cards in board order, not column by column.
-                    .accessibilityElement(children: .contain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
                     .padding(.top, 4)
                     .animation(.snappy(duration: 0.22), value: folder.notes.map(\.id))
+                    .animation(.easeOut(duration: 0.2), value: board.starterFolders.map(\.id))
                 }
                 .scrollContentBackground(.hidden)
+                .accessibilityIdentifier("board")
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { board.frames.board = $0 }
                 .onChange(of: board.selectedNoteID) { _, id in
                     if let id { withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id) } }
@@ -248,7 +256,10 @@ struct BoardHeader: View {
         switch folder.kind {
         case .inbox:
             guard count > 0 else { return "New notes land here." }
-            if board.library.userFolders.isEmpty { return "\(notes) · make a folder to start sorting" }
+            if board.library.userFolders.isEmpty {
+                let k = board.starterFolders.count
+                return k > 0 ? "\(notes) · \(k) \(k == 1 ? "group" : "groups") found. Make one a folder to start sorting." : "\(notes) · make a folder to start sorting"
+            }
             let n = board.suggestedMoves.count
             if n == 0 && board.isSorting { return "\(notes) · sorting…" }
             if n > 0 && board.isSorting { return "\(notes) · \(n) with a suggested folder so far · sorting…" }
@@ -260,6 +271,127 @@ struct BoardHeader: View {
             return stale > 0 ? "\(notes) · \(stale) untouched for \(board.staleDays)+ days" : notes
         }
     }
+}
+
+/// Folders the Inbox suggests making, while there are none of your own yet.
+/// Sorting needs folders with notes in them to compare against; these give
+/// it a start without you naming every topic up front.
+struct StarterFoldersPanel: View {
+    @Environment(Board.self) private var board
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Folders to start with")
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Notes grouped by the words and meaning they share. Name a group, then make it a folder: its notes move in, and sorting has something to compare with.")
+                        .font(.callout)
+                        .foregroundStyle(Theme.quiet)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button("Not Now") { board.dismissStarterFolders() }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Theme.quiet)
+                    .help("Hide these suggestions until you next open the app")
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 230, maximum: 340), spacing: 12, alignment: .top)],
+                      alignment: .leading, spacing: 12) {
+                ForEach(board.starterFolders) { StarterFolderTile(starter: $0).id($0.id) }
+            }
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.window.opacity(0.55))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Theme.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("starterFolders")
+    }
+}
+
+/// One suggested folder: a name you can change, what its notes share, a few
+/// of their titles, and the button that makes it.
+struct StarterFolderTile: View {
+    @Environment(Board.self) private var board
+    let starter: StarterFolder
+    @State private var name: String
+
+    init(starter: StarterFolder) {
+        self.starter = starter
+        _name = State(initialValue: starter.name)
+    }
+
+    var body: some View {
+        let titles = starter.noteIDs.compactMap { board.library.note($0)?.title }.map { $0.isEmpty ? "Untitled" : $0 }
+        let n = starter.noteIDs.count
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .foregroundStyle(Theme.quiet)
+                TextField("Folder name", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                    .foregroundStyle(Theme.ink)
+                    .onSubmit(create)
+                    .accessibilityLabel("Name for this folder")
+                    .accessibilityIdentifier("starterName")
+                Button { board.dismissStarterFolder(starter.id) } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundStyle(Theme.quiet)
+                    .help("Not a folder. Leave these notes in Inbox.")
+                    .accessibilityLabel("Dismiss this group")
+            }
+            if !starter.sharedTerms.isEmpty {
+                Text("Shares " + starter.sharedTerms.map { "“\($0)”" }.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(Theme.quiet)
+                    .lineLimit(1)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(titles.prefix(3).enumerated()), id: \.offset) { _, title in
+                    Text(title).lineLimit(1)
+                }
+                if titles.count > 3 {
+                    Text("and \(titles.count - 3) more").foregroundStyle(Theme.quiet)
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(Theme.ink.opacity(0.82))
+            Button(action: create) {
+                Label("Make Folder with \(n) Notes", systemImage: "folder.badge.plus")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(Theme.accent)
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .help("Make “\(name)” and move these \(n) notes into it")
+            .accessibilityIdentifier("makeStarterFolder")
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.paper(.paper))
+                .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Theme.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Suggested folder \(name), \(n) notes")
+    }
+
+    private func create() { board.createStarterFolder(starter.id, named: name) }
 }
 
 /// Teaches the idea behind the suggestions, short first.

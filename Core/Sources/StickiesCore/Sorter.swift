@@ -309,12 +309,12 @@ public struct Sorter: Sendable {
     }
 }
 
-private func unit(_ v: [Double]) -> [Double] {
+func unit(_ v: [Double]) -> [Double] {
     let n = v.reduce(0) { $0 + $1 * $1 }.squareRoot()
     return n == 0 ? v : v.map { $0 / n }
 }
 
-private func dot(_ a: [Double], _ b: [Double]) -> Double {
+func dot(_ a: [Double], _ b: [Double]) -> Double {
     var s = 0.0
     for i in 0..<min(a.count, b.count) { s += a[i] * b[i] }
     return s

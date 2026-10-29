@@ -39,7 +39,8 @@ public struct SampleSet: Decodable, Sendable {
     }
 
     /// The sample as a `Library` (file names assigned, nothing on disk yet).
-    public func library(now: Date = .now) -> Library {
+    /// `unsorted` puts every note in Inbox with no folders, like a first import.
+    public func library(now: Date = .now, unsorted: Bool = false) -> Library {
         func notes(_ items: [(String, Int)]) -> [Note] {
             var taken: Set<String> = []
             return items.map { text, days in
@@ -47,6 +48,11 @@ public struct SampleSet: Decodable, Sendable {
                 taken.insert(name)
                 return Note(fileName: name, text: text, modified: now.addingTimeInterval(-Double(days) * 86_400))
             }
+        }
+        if unsorted {
+            let all = inbox.map { ($0.text, $0.daysAgo) } + self.folders.flatMap { $0.notes.map { ($0.text, $0.daysAgo) } }
+            return Library(folders: [Folder(name: Library.inboxName, color: .paper, notes: notes(all)),
+                                     Folder(name: Library.archiveName, color: .stone, notes: notes(archive.map { ($0.text, $0.daysAgo) }))])
         }
         var folders = [Folder(name: Library.inboxName, color: .paper, notes: notes(inbox.map { ($0.text, $0.daysAgo) }))]
         folders += self.folders.map { Folder(name: $0.name, color: $0.color, notes: notes($0.notes.map { ($0.text, $0.daysAgo) })) }
@@ -56,8 +62,8 @@ public struct SampleSet: Decodable, Sendable {
 
     /// Write the sample to a notes root (demo mode, "Add sample notes").
     /// Folders that already exist get the sample notes added beside theirs.
-    public func write(to root: URL, now: Date = .now) throws {
-        let lib = library(now: now)
+    public func write(to root: URL, now: Date = .now, unsorted: Bool = false) throws {
+        let lib = library(now: now, unsorted: unsorted)
         let fm = FileManager.default
         for folder in lib.folders {
             let dir = root.appendingPathComponent(folder.name, isDirectory: true)

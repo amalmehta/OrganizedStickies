@@ -14,8 +14,9 @@ struct OrganizedStickiesApp: App {
         let root: URL
         if isDemo {
             // A fresh copy of the sample notes each launch, so demo mode never touches real notes.
+            // -unsorted: every note in Inbox and no folders, like a first import.
             root = FileManager.default.temporaryDirectory.appendingPathComponent("Organized Stickies Demo-\(UUID().uuidString.prefix(8))/Organized Stickies")
-            try? SampleSet.load().write(to: root)
+            try? SampleSet.load().write(to: root, unsorted: args.contains("-unsorted"))
         } else if let i = args.firstIndex(of: "-root"), i + 1 < args.count {
             root = URL(fileURLWithPath: args[i + 1], isDirectory: true)
         } else {

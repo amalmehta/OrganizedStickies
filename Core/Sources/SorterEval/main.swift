@@ -161,6 +161,181 @@ if CommandLine.arguments.contains("--details") {
     }
 }
 
+// Starter folders: put labelled notes in one pile, as if just imported with
+// no folders, and see whether the groups found match the folders a person chose.
+//
+// right   = grouped notes whose folder is their group's most common folder
+//           (a group whose most common label is "nowhere" counts all wrong)
+// grouped = notes with a real home that landed in some group
+// found   = real folders that are some group's most common folder
+struct GroupMetrics {
+    var groups = 0, grouped = 0, right = 0, withHome = 0, homed = 0, found = 0, folders = 0
+    var names: [(name: String, size: Int, label: String)] = []
+    var purity: Double { grouped == 0 ? 1 : Double(right) / Double(grouped) }
+    var coverage: Double { withHome == 0 ? 0 : Double(homed) / Double(withHome) }
+}
+
+let pileTune: [(text: String, label: String?)] =
+    sample.folders.flatMap { f in f.notes.map { ($0.text, Optional(f.name)) } } + inboxTune.map { ($0.text, $0.expected) }
+let pileCheck: [(text: String, label: String?)] = check.map { ($0.text, $0.expected) }
+let pileAll = pileTune + pileCheck
+let wordVectors = WordVectorEmbedder()
+
+func groupEval(_ config: FolderFinderConfig, _ pile: [(text: String, label: String?)]) -> GroupMetrics {
+    let ids = pile.map { _ in UUID() }
+    let label = Dictionary(uniqueKeysWithValues: zip(ids, pile.map(\.label)))
+    let proposals = FolderFinder(config: config, embedder: wordVectors).propose(notes: Array(zip(ids, pile.map(\.text))))
+    var m = GroupMetrics()
+    m.groups = proposals.count
+    m.withHome = pile.filter { $0.label != nil }.count
+    let counts = Dictionary(grouping: pile.compactMap(\.label), by: { $0 }).mapValues(\.count)
+    m.folders = counts.filter { $0.value >= config.minNotes }.count
+    var found: Set<String> = []
+    for p in proposals {
+        let labels = p.noteIDs.map { label[$0] ?? nil }
+        let tally = Dictionary(grouping: labels, by: { $0 ?? "—" }).mapValues(\.count)
+        let top = tally.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }!.key
+        m.grouped += p.noteIDs.count
+        m.homed += labels.filter { $0 != nil }.count
+        if top != "—" {
+            m.right += tally[top]!
+            found.insert(top)
+        }
+        m.names.append((p.name, p.noteIDs.count, top))
+    }
+    m.found = found.count
+    return m
+}
+
+// Most real folders found with 90%+ of grouped notes right (the same bar as
+// suggestions), then most notes grouped.
+var bestGroup: (FolderFinderConfig, GroupMetrics)?
+for w in stride(from: 0.0, through: 1.0, by: 0.1) {
+    for j in stride(from: 0.0, through: 0.5, by: 0.0125) {
+        let c = FolderFinderConfig(wordWeight: w, joinAt: j)
+        let m = groupEval(c, pileTune)
+        guard m.purity >= 0.9 else { continue }
+        if let b = bestGroup {
+            if (m.found, m.coverage, m.purity) > (b.1.found, b.1.coverage, b.1.purity) { bestGroup = (c, m) }
+        } else { bestGroup = (c, m) }
+    }
+}
+do {
+    let fittedGroup = bestGroup?.0 ?? .standard
+    func groupRow(_ name: String, _ c: FolderFinderConfig, _ pile: [(text: String, label: String?)]) -> String {
+        let m = groupEval(c, pile)
+        return "| \(name) | \(pile.count) | \(m.groups) | \(m.found) of \(m.folders) | \(pct(m.purity)) (\(m.right)/\(m.grouped)) | \(pct(m.coverage)) (\(m.homed)/\(m.withHome)) |"
+    }
+    report += """
+
+    ## Starter folders
+
+    With no folders yet, the app offers groups it finds in the Inbox as folders to make. Here every labelled note goes into one pile, as if just imported, and the groups found are compared with the folders a person chose.
+
+    - **Right**: of the notes put in a group, how many share the folder most common in their group. A group made mostly of notes that belong nowhere counts as all wrong.
+    - **Grouped**: of the notes with a real home, how many landed in some group. The rest stay in Inbox.
+    - **Folders found**: real folders (with at least \(fittedGroup.minNotes) notes in the pile) that are some group's most common folder.
+
+    | Settings | Notes | Groups | Folders found | Right | Grouped |
+    |---|---|---|---|---|---|
+    \(groupRow("Shipped default, tune pile", .standard, pileTune))
+    \(groupRow("Shipped default, held-out check pile", .standard, pileCheck))
+    \(groupRow("Shipped default, everything at once", .standard, pileAll))
+    \(groupRow("Fitted on tune pile, tune pile", fittedGroup, pileTune))
+    \(groupRow("Fitted on tune pile, held-out check pile", fittedGroup, pileCheck))
+    \(groupRow("Words only, check pile", FolderFinderConfig(wordWeight: 1, joinAt: fittedGroup.joinAt), pileCheck))
+
+    Fitted numbers: word weight \(String(format: "%.1f", fittedGroup.wordWeight)), join at \(String(format: "%.3f", fittedGroup.joinAt)), at least \(fittedGroup.minNotes) notes a group, at most \(fittedGroup.maxFolders) groups. The check pile is \(pileCheck.count) notes, about the size of a first import, so a single note moves its numbers by several points.
+
+    Groups found in the held-out check pile (name, notes, most common real folder):
+
+    """
+    for g in groupEval(fittedGroup, pileCheck).names { report += "- \(g.name): \(g.size) notes, mostly \(g.label)\n" }
+    report += "\nGroups found with everything at once:\n\n"
+    for g in groupEval(fittedGroup, pileAll).names { report += "- \(g.name): \(g.size) notes, mostly \(g.label)\n" }
+
+    // The point of starter folders: once they exist, the sorter has something
+    // to compare with. Make every suggested folder, then sort what's left.
+    func followOn(_ pile: [(text: String, label: String?)], renamed: Bool) -> (left: Int, shown: Int, right: Int) {
+        let ids = pile.map { _ in UUID() }
+        let byID = Dictionary(uniqueKeysWithValues: zip(ids, pile))
+        let groups = FolderFinder(config: .standard, embedder: wordVectors).propose(notes: Array(zip(ids, pile.map(\.text))))
+        var majority: [String: String] = [:]
+        for g in groups {
+            let tally = Dictionary(grouping: g.noteIDs.compactMap { byID[$0]?.label }, by: { $0 }).mapValues(\.count)
+            majority[g.name] = tally.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+        }
+        // Renamed: you give each group the name of what it holds, and skip a
+        // second group for something you already made (its notes stay in Inbox).
+        var made = groups
+        if renamed {
+            var seen: Set<String> = []
+            made = groups.filter { g in majority[g.name].map { seen.insert($0).inserted } ?? false }
+            for i in made.indices {
+                let label = majority[made[i].name]!
+                majority[label] = label
+                made[i].name = label
+            }
+        }
+        let grouped = Set(made.flatMap(\.noteIDs))
+        let rest = ids.filter { !grouped.contains($0) }
+        let folders = made.map { SortCandidate(name: $0.name, notes: $0.noteIDs.map { byID[$0]!.text }) }
+        let out = Sorter(config: .standard, embedder: embedder).suggest(notes: rest.map { ($0, byID[$0]!.text) }, folders: folders)
+        var shown = 0, right = 0
+        for (id, o) in out {
+            guard let f = o.folder else { continue }
+            shown += 1
+            if let label = byID[id]?.label, label == majority[f] { right += 1 }
+        }
+        return (rest.count, shown, right)
+    }
+    let fc = followOn(pileCheck, renamed: false), fa = followOn(pileAll, renamed: false)
+    let rc = followOn(pileCheck, renamed: true), ra = followOn(pileAll, renamed: true)
+    report += """
+
+    Then the sorter takes over. After making every suggested folder, sorting the notes still in Inbox (a suggestion is right when the note belongs with most of that folder's notes):
+
+    | Pile | Folder names | Left in Inbox | Suggested | Right |
+    |---|---|---|---|---|
+    | Held-out check pile | as drafted | \(fc.left) | \(fc.shown) | \(fc.right) |
+    | Held-out check pile | renamed, no duplicates | \(rc.left) | \(rc.shown) | \(rc.right) |
+    | Everything at once | as drafted | \(fa.left) | \(fa.shown) | \(fa.right) |
+    | Everything at once | renamed, no duplicates | \(ra.left) | \(ra.shown) | \(ra.right) |
+
+    """
+}
+
+// Why word vectors: how well each kind of meaning vector tells two notes
+// on the same topic from two on different topics, one pair at a time.
+// AUC = the chance a random same-folder pair scores higher than a random
+// different-folder pair (0.5 is a coin flip, 1.0 is perfect).
+do {
+    func auc(_ pile: [(text: String, label: String?)], _ model: SentenceEmbedder) -> Double {
+        let sim = FolderFinder(config: .standard, embedder: model).similarities(pile.map(\.text))
+        var same: [Double] = [], diff: [Double] = []
+        for i in pile.indices { for j in (i + 1)..<pile.count {
+            guard let a = pile[i].label, let b = pile[j].label else { continue }
+            if a == b { same.append(sim[i][j]) } else { diff.append(sim[i][j]) }
+        } }
+        var wins = 0.0
+        for x in same { for y in diff { wins += x > y ? 1 : (x == y ? 0.5 : 0) } }
+        return wins / Double(same.count * diff.count)
+    }
+    let f2 = { (x: Double) in String(format: "%.2f", x) }
+    report += """
+
+    ### Why word vectors
+
+    With no folders, notes can only be compared one pair at a time, and that's much harder than comparing a note with a whole folder. AUC is the chance that two notes from the same folder look more alike than two from different folders: 0.5 is a coin flip, 1.0 is perfect. Both rows mix in word overlap at the shipped weight.
+
+    | Meaning from | Everything at once | Held-out check pile |
+    |---|---|---|
+    | Apple's sentence model (what the sorter uses) | \(f2(auc(pileAll, embedder))) | \(f2(auc(pileCheck, embedder))) |
+    | Apple's word vectors, summed (what starter folders use) | \(f2(auc(pileAll, wordVectors))) | \(f2(auc(pileCheck, wordVectors))) |
+
+    """
+}
+
 print(report)
 if let i = CommandLine.arguments.firstIndex(of: "--write"), i + 1 < CommandLine.arguments.count {
     try report.write(toFile: CommandLine.arguments[i + 1], atomically: true, encoding: .utf8)

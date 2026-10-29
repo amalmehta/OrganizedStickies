@@ -383,6 +383,14 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
   (board, toolbar strip, around the sidebar) is now Liquid Glass over a
   see-through window, with solid cards. After trying it: "a bit more
   opaque", so the paper wash over the glass went from 15% to 30%.
+- Changed 2026-10-29, at my request (from a 0,5,5 review, picked: "suggested
+  starter folders" and "old Inbox notes get the Archive offer"): with no
+  folders of my own, the Inbox offers groups of notes as folders to start
+  with, each with a draft name to change, made in one click with its notes
+  moved in. Grouping uses on-device word vectors, not the sentence model,
+  because one-note-to-one-note comparisons with the sentence model were
+  barely better than chance. On an Inbox card a folder suggestion still comes
+  first, but the Archive offer now replaces "No clear match".
 - Delivery: local build for macOS 26 or later, signed for this Mac only, in
   /Applications. Code goes to a public GitHub repo, amalmehta/OrganizedStickies.
 - Measured on my real Apple Stickies (word counts only, no text read): 25 notes,
@@ -423,7 +431,9 @@ DEFINITIONS AND DEFERRED:
   the app becomes active), a global hotkey, a Claude API sorter, a website,
   notarized distribution, bundling the Newsreader and Inter fonts (the system
   serif New York and SF stand in), and learning from accepted or rejected
-  suggestions. From the 2026-10-27 smoothness list, not picked: a quieter
+  suggestions, and a stricter sorter for young, small folders (after starter
+  folders its suggestions for the remaining notes were right about half the
+  time on sample notes). From the 2026-10-27 smoothness list, not picked: a quieter
   "No clear match" (a ? mark with the reason on hover), stale clocks out of the
   sidebar, spring animations everywhere, expanding a card into a roomy editor,
   folders that fade into each other and keep their scroll position, saving
@@ -501,3 +511,5 @@ CHANGELOG:
 - 2026-10-26 — built v1.0: board app, on-device sorter (fitted and evaluated on sample notes), importer, settings, feedback, icon, tests and docs
 - 2026-10-27 — v1.1: glass backboard, cards that fit their text, notes that fly to their folder, suggestions that stream in; word analysis about 13× faster (taggers reused); recorded the six smoothness proposals not picked
 - 2026-10-28 — v1.1.1: the whole window is Liquid Glass, so the desktop really shows through (v1.1's frosted board drew as flat grey on macOS 26)
+- 2026-10-28 — the New Note button shows its title beside its icon, so it's bigger
+- 2026-10-29 — v1.2: starter folders for an Inbox with no folders yet (fitted and evaluated on sample notes); old Inbox notes offer Archive instead of "No clear match"
