@@ -17,6 +17,7 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button { board.newNote() } label: {
                     Label("New Note", systemImage: "square.and.pencil")
+                        .labelStyle(.titleAndIcon)
                 }
                 .help("New note (⌘N)")
                 .accessibilityIdentifier("newNoteButton")
