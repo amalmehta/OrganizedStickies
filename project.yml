@@ -10,7 +10,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.0.0"
+    MARKETING_VERSION: "1.2.2"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"
@@ -30,6 +30,8 @@ targets:
       properties:
         CFBundleDisplayName: Organized Stickies
         CFBundleName: Organized Stickies
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: "© 2026 Amal Mehta"
         LSMinimumSystemVersion: "26.0"

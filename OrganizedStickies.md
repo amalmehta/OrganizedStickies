@@ -527,3 +527,4 @@ CHANGELOG:
 - 2026-10-29 — v1.2: starter folders for an Inbox with no folders yet (fitted and evaluated on sample notes); old Inbox notes offer Archive instead of "No clear match"
 - 2026-10-29 — v1.2.1: folders with fewer than 7 notes need a closer match (fitted on simulated imports from tuning notes, checked on held-out ones)
 - 2026-10-29 — v1.2.2: notes that came with a starter folder don't count toward the 7, so big starter folders stay young too; young threshold refitted to 0.32
+- 2026-10-30 — the app's version number now says 1.2.2 (it had stayed at 1.0); project.yml sets it, and Info.plist reads it from there

@@ -47,3 +47,10 @@
    → Committed v1.2.1 as one commit and pushed.
 6. "Treat folders made from starter groups as young until I've filed notes into them by hand, so big imports are covered too. Measure it the same way."
    → Each folder now remembers which notes came with its starter group (saved by file name in the index, so renames and reloads keep it); only the others count toward the 7. Added simulated 60-note imports and a v1.2.1 column to the evaluation. Big imports went from 10 of 54 suggestions right to 4 of 5; refitting moved the young threshold to 0.32 (91% right on tuning imports); held-out imports still show nothing, where v1.2 showed 105 wrong.
+7. "Commit and push v1.2.2."
+   → Committed v1.2.2 as one commit and pushed. Noticed the app itself still reported version 1.0.
+
+## 2026-10-30 — The app's version number
+
+1. "Update the app's version number to 1.2.2, reinstall, and commit and push it."
+   → Set MARKETING_VERSION to 1.2.2 in project.yml and pointed Info.plist's version keys at the build settings, because XcodeGen had been writing its default 1.0 there. Reinstalled and committed.
