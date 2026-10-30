@@ -92,33 +92,37 @@ Groups found with everything at once:
 - Bill: 5 notes, mostly Home & Errands
 - Reward: 4 notes, mostly Reward Hacking
 
-Then the sorter takes over. After making every suggested folder, sorting the notes still in Inbox (a suggestion is right when the note belongs with most of that folder's notes). Right/suggested, before and after young folders needed a closer match (see "Young folders" below):
+Then the sorter takes over. After making every suggested folder, sorting the notes still in Inbox (a suggestion is right when the note belongs with most of that folder's notes). Right/suggested in v1.2, in v1.2.1 (young folders need a closer match) and now (starter folders stay young until you file notes into them; see "Young folders" below):
 
-| Pile | Folder names | Left in Inbox | Before (v1.2) | Now |
-|---|---|---|---|---|
-| Held-out check pile | as drafted | 16 | 0/1 | 0/0 |
-| Held-out check pile | renamed, no duplicates | 16 | 0/1 | 0/0 |
-| Everything at once | as drafted | 51 | 4/8 | 0/4 |
-| Everything at once | renamed, no duplicates | 55 | 5/9 | 1/5 |
+| Pile | Folder names | Left in Inbox | v1.2 | v1.2.1 | Now |
+|---|---|---|---|---|---|
+| Held-out check pile | as drafted | 16 | 0/1 | 0/0 | 0/0 |
+| Held-out check pile | renamed, no duplicates | 16 | 0/1 | 0/0 | 0/0 |
+| Everything at once | as drafted | 51 | 4/8 | 0/4 | 0/1 |
+| Everything at once | renamed, no duplicates | 55 | 5/9 | 1/5 | 0/1 |
 
 ## Young folders
 
-A folder with fewer than 7 notes is young, and a suggestion into it needs a score of at least 0.33 instead of 0.25. Folders of 7 or 8 notes are where the sorter has been measured above 90% (the sample's folders hold 8; leaving one note out leaves 7); folders of 2 to 5 notes were measured well below it, and 6 is untested, so it counts as young. Few notes say little about a topic, and in a first import many notes belong to topics that have no folder yet, so they drift to the nearest young one.
+A folder with fewer than 7 notes is young, and a suggestion into it needs a score of at least 0.32 instead of 0.25. Folders of 7 or 8 notes are where the sorter has been measured above 90% (the sample's folders hold 8; leaving one note out leaves 7); folders of 2 to 5 notes were measured well below it, and 6 is untested, so it counts as young. Few notes say little about a topic, and in a first import many notes belong to topics that have no folder yet, so they drift to the nearest young one.
 
-Measured on simulated first imports, with fixed seeds so the numbers repeat. Tuning imports draw 25 of the 70 tuning notes; held-out imports draw 18 of the 22 held-out notes, which the threshold never saw. In each, either every starter folder is made, or 2 or 4 folders are made by hand with the right notes and names (2, 3 or 5 notes each on tuning notes; 2 on held-out notes, which have only 3 per topic). Then the rest of the import is sorted. Precision of those suggestions, before (v1.2, no young-folder rule) and now:
+Notes that arrived with a starter group don't count toward those 7: a suggested group can mix topics, and only notes you file yourself show what a folder is for. So a folder made from a starter group stays young, however big, until you've filed 7 notes into it yourself (by drag, menu, or accepting a suggestion).
 
-| Imports | Before (v1.2) | Now |
-|---|---|---|
-| Tuning: every starter folder, names as drafted (93) | 20% (16/79) | 0% (0/1) |
-| Tuning: every starter folder, renamed (93) | 24% (24/99) | 0% (0/1) |
-| Tuning: folders made by hand (93) | 77% (134/174) | 97% (28/29) |
-| **Tuning, all** | 49% (174/352) | 90% (28/31) |
-| Held out: every starter folder, names as drafted (55) | 0% (0/40) | none shown |
-| Held out: every starter folder, renamed (55) | 0% (0/39) | none shown |
-| Held out: folders made by hand (74) | 0% (0/26) | none shown |
-| **Held out, all** | 0% (0/105) | none shown |
+Measured on simulated first imports, with fixed seeds so the numbers repeat. Tuning imports draw 25 of the 70 tuning notes (big ones draw 60); held-out imports draw 18 of the 22 held-out notes, which the threshold never saw. In each, either every starter folder is made, or 2 or 4 folders are made by hand with the right notes and names (2, 3 or 5 notes each on tuning notes; 2 on held-out notes, which have only 3 per topic). Then the rest of the import is sorted. Precision of those suggestions in v1.2 (no young-folder rule), v1.2.1 (young folders need a closer match, starter notes counted as filed by hand) and now:
 
-Fitted young threshold: 0.33 (the lowest with 90%+ right on the tuning imports; shipped: 0.33). Imports overlap, since they're drawn from the same few notes, so these counts overstate how much evidence there is. The cost is fewer suggestions while folders are young: the notes wait in Inbox for you to file a few more by hand.
+| Imports | v1.2 | v1.2.1 | Now |
+|---|---|---|---|
+| Tuning: every starter folder, names as drafted (93) | 20% (16/79) | 0% (0/1) | 100% (1/1) |
+| Tuning: every starter folder, renamed (93) | 24% (24/99) | 0% (0/1) | 50% (1/2) |
+| Tuning: folders made by hand (93) | 77% (134/174) | 97% (28/29) | 94% (29/31) |
+| **Tuning, all** | 49% (174/352) | 90% (28/31) | 91% (31/34) |
+| Tuning, big: every starter folder, names as drafted (40) | 47% (50/107) | 25% (7/28) | 100% (4/4) |
+| Tuning, big: every starter folder, renamed (40) | 42% (53/126) | 12% (3/26) | 0% (0/1) |
+| Held out: every starter folder, names as drafted (55) | 0% (0/40) | none shown | none shown |
+| Held out: every starter folder, renamed (55) | 0% (0/39) | none shown | none shown |
+| Held out: folders made by hand (74) | 0% (0/26) | none shown | none shown |
+| **Held out, all** | 0% (0/105) | none shown | none shown |
+
+Fitted young threshold: 0.32 (the lowest with 90%+ right on the tuning imports; shipped: 0.32). Imports overlap, since they're drawn from the same few notes, so these counts overstate how much evidence there is. The cost is fewer suggestions while folders are young: the notes wait in Inbox for you to file a few more by hand.
 
 ### Why word vectors
 

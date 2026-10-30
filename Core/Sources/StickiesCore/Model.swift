@@ -56,13 +56,20 @@ public struct Folder: Identifiable, Hashable, Sendable {
     public var name: String
     public var color: FolderColor
     public var notes: [Note]
+    /// Notes that arrived with a starter-folder suggestion rather than being
+    /// filed by hand. They say less about what the folder is for.
+    public var suggestedNotes: Set<Note.ID>
 
-    public init(id: UUID = UUID(), name: String, color: FolderColor, notes: [Note] = []) {
+    public init(id: UUID = UUID(), name: String, color: FolderColor, notes: [Note] = [], suggestedNotes: Set<Note.ID> = []) {
         self.id = id
         self.name = name
         self.color = color
         self.notes = notes
+        self.suggestedNotes = suggestedNotes
     }
+
+    /// Notes you filed here yourself (by drag, menu, or accepting a suggestion).
+    public var filedByHand: Int { notes.count - notes.filter { suggestedNotes.contains($0.id) }.count }
 
     public var kind: FolderKind {
         switch name {
@@ -93,6 +100,9 @@ public struct LibraryIndex: Codable, Sendable, Equatable {
         public var name: String
         public var color: FolderColor
         public var order: [String]
+        /// File names of notes that arrived with a starter-folder suggestion.
+        /// Left out when there are none, so older index files read the same.
+        public var suggested: [String]? = nil
     }
     public var version: Int = 1
     public var folders: [Entry]

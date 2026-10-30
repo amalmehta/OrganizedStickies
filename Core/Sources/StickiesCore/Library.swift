@@ -55,7 +55,9 @@ public struct Library: Sendable, Equatable {
     public var index: LibraryIndex {
         LibraryIndex(
             folders: folders.map { f in
-                .init(name: f.name, color: f.color, order: f.notes.compactMap { $0.isOnDisk ? $0.fileName : nil })
+                let suggested = f.notes.filter { $0.isOnDisk && f.suggestedNotes.contains($0.id) }.map(\.fileName)
+                return .init(name: f.name, color: f.color, order: f.notes.compactMap { $0.isOnDisk ? $0.fileName : nil },
+                             suggested: suggested.isEmpty ? nil : suggested)
             },
             importedStickies: importedStickies.sorted()
         )
@@ -123,6 +125,7 @@ public struct Library: Sendable, Equatable {
     public mutating func trash(_ id: Note.ID) -> [DiskOp] {
         guard let l = location(of: id) else { return [] }
         let note = folders[l.folder].notes.remove(at: l.note)
+        folders[l.folder].suggestedNotes.remove(id)
         guard note.isOnDisk else { return [] }
         return [.trashNote(folder: folders[l.folder].name, file: note.fileName), .saveIndex(index)]
     }
@@ -136,6 +139,9 @@ public struct Library: Sendable, Equatable {
         }
         var ops: [DiskOp] = []
         var note = folders[l.folder].notes.remove(at: l.note)
+        // Once it leaves, it no longer came with a suggestion; moved back by
+        // hand, it counts as filed by hand.
+        folders[l.folder].suggestedNotes.remove(id)
         let from = folders[l.folder].name, to = folders[target].name
         if note.isOnDisk {
             let newName = NoteNaming.uniqueFileName(
@@ -152,6 +158,17 @@ public struct Library: Sendable, Equatable {
         folders[target].notes.insert(note, at: p)
         ops.append(.saveIndex(index))
         return ops
+    }
+
+    /// Marks notes in a folder as having arrived with a starter-folder
+    /// suggestion, so they don't count as filed by hand.
+    public mutating func markSuggested(_ ids: [Note.ID], in folderID: Folder.ID) -> [DiskOp] {
+        guard let fi = folderIndex(folderID) else { return [] }
+        let present = Set(folders[fi].notes.map(\.id))
+        let marked = ids.filter(present.contains)
+        guard !marked.isEmpty else { return [] }
+        folders[fi].suggestedNotes.formUnion(marked)
+        return [.saveIndex(index)]
     }
 
     /// Reorder within a folder.
@@ -259,7 +276,10 @@ public struct Library: Sendable, Equatable {
                 guard let o = oldNotes[n.fileName.lowercased()] else { return n }
                 return o.dirty ? o : Note(id: o.id, fileName: n.fileName, text: n.text, modified: n.modified)
             }
-            out.folders[fi] = Folder(id: old.id, name: name, color: out.folders[fi].color, notes: notes)
+            // Suggested notes by file name, since the disk copy has fresh IDs.
+            let suggestedFiles = Set(out.folders[fi].notes.filter { out.folders[fi].suggestedNotes.contains($0.id) }.map { $0.fileName.lowercased() })
+            let suggested = Set(notes.filter { suggestedFiles.contains($0.fileName.lowercased()) }.map(\.id))
+            out.folders[fi] = Folder(id: old.id, name: name, color: out.folders[fi].color, notes: notes, suggestedNotes: suggested)
             // Unsaved new notes stay where they were.
             for (i, n) in old.notes.enumerated() where !n.isOnDisk {
                 out.folders[fi].notes.insert(n, at: min(i, out.folders[fi].notes.count))

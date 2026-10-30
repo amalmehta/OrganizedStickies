@@ -18,6 +18,8 @@ struct Metrics {
 let sample = try SampleSet.load()
 /// v1.2's sorter: no closer match needed for young folders.
 let noYoungRule: SorterConfig = { var c = SorterConfig.standard; c.youngThreshold = c.threshold; return c }()
+/// v1.2.1's sorter: young folders needed 0.33 (starter notes counted as filed by hand).
+let v121: SorterConfig = { var c = SorterConfig.standard; c.youngThreshold = 0.33; return c }()
 let candidates = sample.folders.map { SortCandidate(name: $0.name, notes: $0.notes.map(\.text)) }
 let embedder = AppleSentenceEmbedder()
 let base = Sorter(embedder: embedder)
@@ -258,7 +260,7 @@ do {
 
     // The point of starter folders: once they exist, the sorter has something
     // to compare with. Make every suggested folder, then sort what's left.
-    func followOn(_ pile: [(text: String, label: String?)], renamed: Bool, config: SorterConfig = .standard) -> (left: Int, shown: Int, right: Int) {
+    func followOn(_ pile: [(text: String, label: String?)], renamed: Bool, config: SorterConfig = .standard, countSuggested: Bool = true) -> (left: Int, shown: Int, right: Int) {
         let ids = pile.map { _ in UUID() }
         let byID = Dictionary(uniqueKeysWithValues: zip(ids, pile))
         let groups = FolderFinder(config: .standard, embedder: wordVectors).propose(notes: Array(zip(ids, pile.map(\.text))))
@@ -281,7 +283,7 @@ do {
         }
         let grouped = Set(made.flatMap(\.noteIDs))
         let rest = ids.filter { !grouped.contains($0) }
-        let folders = made.map { SortCandidate(name: $0.name, notes: $0.noteIDs.map { byID[$0]!.text }) }
+        let folders = made.map { SortCandidate(name: $0.name, notes: $0.noteIDs.map { byID[$0]!.text }, suggestedNotes: countSuggested ? $0.noteIDs.count : 0) }
         let out = Sorter(config: config, embedder: embedder).suggest(notes: rest.map { ($0, byID[$0]!.text) }, folders: folders)
         var shown = 0, right = 0
         for (id, o) in out {
@@ -292,15 +294,16 @@ do {
         return (rest.count, shown, right)
     }
     func both(_ pile: [(text: String, label: String?)], renamed: Bool) -> String {
-        let b = followOn(pile, renamed: renamed, config: noYoungRule), a = followOn(pile, renamed: renamed)
-        return "\(a.left) | \(b.right)/\(b.shown) | \(a.right)/\(a.shown)"
+        let b = followOn(pile, renamed: renamed, config: noYoungRule, countSuggested: false)
+        let m = followOn(pile, renamed: renamed, config: v121, countSuggested: false), a = followOn(pile, renamed: renamed)
+        return "\(a.left) | \(b.right)/\(b.shown) | \(m.right)/\(m.shown) | \(a.right)/\(a.shown)"
     }
     report += """
 
-    Then the sorter takes over. After making every suggested folder, sorting the notes still in Inbox (a suggestion is right when the note belongs with most of that folder's notes). Right/suggested, before and after young folders needed a closer match (see "Young folders" below):
+    Then the sorter takes over. After making every suggested folder, sorting the notes still in Inbox (a suggestion is right when the note belongs with most of that folder's notes). Right/suggested in v1.2, in v1.2.1 (young folders need a closer match) and now (starter folders stay young until you file notes into them; see "Young folders" below):
 
-    | Pile | Folder names | Left in Inbox | Before (v1.2) | Now |
-    |---|---|---|---|---|
+    | Pile | Folder names | Left in Inbox | v1.2 | v1.2.1 | Now |
+    |---|---|---|---|---|---|
     | Held-out check pile | as drafted | \(both(pileCheck, renamed: false)) |
     | Held-out check pile | renamed, no duplicates | \(both(pileCheck, renamed: true)) |
     | Everything at once | as drafted | \(both(pileAll, renamed: false)) |
@@ -366,7 +369,8 @@ do {
                 let grouped = Set(made.flatMap(\.noteIDs))
                 let rest = ids.filter { !grouped.contains($0) }
                 let analyses = analyzer.analyze(notes: rest.map { byID[$0]!.text },
-                                                folders: made.map { SortCandidate(name: $0.name, notes: $0.noteIDs.map { byID[$0]!.text }) })
+                                                folders: made.map { SortCandidate(name: $0.name, notes: $0.noteIDs.map { byID[$0]!.text },
+                                                                                  suggestedNotes: $0.noteIDs.count) })
                 let cases = zip(rest, analyses).map { id, a in (a: a, right: byID[id]!.label.flatMap { home[$0] }) }
                 if renamed { sim.renamed += cases } else { sim.drafted += cases }
             }
@@ -409,9 +413,13 @@ do {
         return (shown, right)
     }
     func with(young t: Double) -> SorterConfig { var c = SorterConfig.standard; c.youngThreshold = t; return c }
+    /// v1.2.1: young folders, but notes from a starter group counted as filed by hand.
+    func asV121(_ cases: [Case]) -> [Case] { cases.map { (a: $0.a.countingEveryNoteAsFiledByHand(), right: $0.right) } }
 
     let tuneSim = simulate(pileTune, size: 25, starterDraws: 100, handDraws: 25, ks: [2, 3, 5], seed: 42)
     let checkSim = simulate(pileCheck, size: 18, starterDraws: 60, handDraws: 60, ks: [2], seed: 7)
+    // Big imports make big starter groups, which can mix topics.
+    let bigSim = simulate(pileTune, size: 60, starterDraws: 40, handDraws: 0, ks: [], seed: 99)
 
     // Fit: the lowest young threshold with 90%+ of suggestions right across
     // every tuning-note import (lower keeps more suggestions).
@@ -425,7 +433,7 @@ do {
         t.shown == 0 ? "none shown" : "\(pct(Double(t.right) / Double(t.shown))) (\(t.right)/\(t.shown))"
     }
     func row(_ name: String, _ cases: [Case]) -> String {
-        "| \(name) | \(cell(tally(cases, noYoungRule))) | \(cell(tally(cases, .standard))) |"
+        "| \(name) | \(cell(tally(asV121(cases), noYoungRule))) | \(cell(tally(asV121(cases), v121))) | \(cell(tally(cases, .standard))) |"
     }
     report += """
 
@@ -433,14 +441,18 @@ do {
 
     A folder with fewer than \(SorterConfig.standard.matureNotes) notes is young, and a suggestion into it needs a score of at least \(String(format: "%.2f", SorterConfig.standard.youngThreshold)) instead of \(String(format: "%.2f", SorterConfig.standard.threshold)). Folders of 7 or 8 notes are where the sorter has been measured above 90% (the sample's folders hold 8; leaving one note out leaves 7); folders of 2 to 5 notes were measured well below it, and 6 is untested, so it counts as young. Few notes say little about a topic, and in a first import many notes belong to topics that have no folder yet, so they drift to the nearest young one.
 
-    Measured on simulated first imports, with fixed seeds so the numbers repeat. Tuning imports draw 25 of the \(pileTune.count) tuning notes; held-out imports draw 18 of the \(pileCheck.count) held-out notes, which the threshold never saw. In each, either every starter folder is made, or 2 or 4 folders are made by hand with the right notes and names (2, 3 or 5 notes each on tuning notes; 2 on held-out notes, which have only 3 per topic). Then the rest of the import is sorted. Precision of those suggestions, before (v1.2, no young-folder rule) and now:
+    Notes that arrived with a starter group don't count toward those 7: a suggested group can mix topics, and only notes you file yourself show what a folder is for. So a folder made from a starter group stays young, however big, until you've filed 7 notes into it yourself (by drag, menu, or accepting a suggestion).
 
-    | Imports | Before (v1.2) | Now |
-    |---|---|---|
+    Measured on simulated first imports, with fixed seeds so the numbers repeat. Tuning imports draw 25 of the \(pileTune.count) tuning notes (big ones draw 60); held-out imports draw 18 of the \(pileCheck.count) held-out notes, which the threshold never saw. In each, either every starter folder is made, or 2 or 4 folders are made by hand with the right notes and names (2, 3 or 5 notes each on tuning notes; 2 on held-out notes, which have only 3 per topic). Then the rest of the import is sorted. Precision of those suggestions in v1.2 (no young-folder rule), v1.2.1 (young folders need a closer match, starter notes counted as filed by hand) and now:
+
+    | Imports | v1.2 | v1.2.1 | Now |
+    |---|---|---|---|
     \(row("Tuning: every starter folder, names as drafted (\(tuneSim.imports))", tuneSim.drafted))
     \(row("Tuning: every starter folder, renamed (\(tuneSim.imports))", tuneSim.renamed))
     \(row("Tuning: folders made by hand (\(tuneSim.handImports))", tuneSim.hand))
     \(row("**Tuning, all**", tuneSim.all))
+    \(row("Tuning, big: every starter folder, names as drafted (\(bigSim.imports))", bigSim.drafted))
+    \(row("Tuning, big: every starter folder, renamed (\(bigSim.imports))", bigSim.renamed))
     \(row("Held out: every starter folder, names as drafted (\(checkSim.imports))", checkSim.drafted))
     \(row("Held out: every starter folder, renamed (\(checkSim.imports))", checkSim.renamed))
     \(row("Held out: folders made by hand (\(checkSim.handImports))", checkSim.hand))

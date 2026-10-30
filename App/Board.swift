@@ -326,7 +326,9 @@ final class Board {
         let notes = library.inbox.notes
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { (id: $0.id, text: $0.text) }
-        let candidates = library.userFolders.map { SortCandidate(name: $0.name, notes: $0.notes.map(\.text)) }
+        let candidates = library.userFolders.map {
+            SortCandidate(name: $0.name, notes: $0.notes.map(\.text), suggestedNotes: $0.notes.count - $0.filedByHand)
+        }
         guard !notes.isEmpty else { suggestions = [:]; isSorting = false; return }
         let config = SorterConfig.standard.shifted(by: strictness)
         let embedder = embedder
@@ -421,7 +423,14 @@ final class Board {
             try? await Task.sleep(for: .milliseconds(120))
             guard let self else { return }
             for (i, note) in starter.noteIDs.enumerated() { fly(note, to: folderName, delay: Double(min(i, 12)) * 0.03) }
-            for note in starter.noteIDs where library.folderOf(note: note)?.kind == .inbox { move(note, to: folderID) }
+            var moved: [Note.ID] = []
+            for note in starter.noteIDs where library.folderOf(note: note)?.kind == .inbox {
+                move(note, to: folderID)
+                moved.append(note)
+            }
+            // They came with a suggestion, so they don't count as filed by
+            // hand: the folder stays young until you file notes into it.
+            apply(library.markSuggested(moved, in: folderID))
         }
     }
 

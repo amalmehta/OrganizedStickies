@@ -398,6 +398,13 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
   suggestions are right. On imports from the held-out notes, v1.2's 105
   suggestions were all wrong, and none are shown now. Big imports can still
   make starter folders of 7+ mixed notes that draw wrong suggestions.
+- Changed 2026-10-29, at my request ("treat folders made from starter groups
+  as young until I've filed notes into them by hand"): notes that arrive
+  with a starter folder don't count toward the 7, so such a folder stays
+  young until I've filed 7 notes into it myself (drag, menu or accepting a
+  suggestion). Refitting moved the young threshold from 0.33 to 0.32. On
+  simulated 60-note imports, suggestions after starter folders went from 10
+  of 54 right to 4 of 5.
 - Delivery: local build for macOS 26 or later, signed for this Mac only, in
   /Applications. Code goes to a public GitHub repo, amalmehta/OrganizedStickies.
 - Measured on my real Apple Stickies (word counts only, no text read): 25 notes,
@@ -438,9 +445,7 @@ DEFINITIONS AND DEFERRED:
   the app becomes active), a global hotkey, a Claude API sorter, a website,
   notarized distribution, bundling the Newsreader and Inter fonts (the system
   serif New York and SF stand in), and learning from accepted or rejected
-  suggestions, and treating folders made from starter groups as young until
-  you've filed notes into them by hand (big imports make starter folders of
-  7+ mixed notes). From the 2026-10-27 smoothness list, not picked: a quieter
+  suggestions. From the 2026-10-27 smoothness list, not picked: a quieter
   "No clear match" (a ? mark with the reason on hover), stale clocks out of the
   sidebar, spring animations everywhere, expanding a card into a roomy editor,
   folders that fade into each other and keep their scroll position, saving
@@ -521,3 +526,4 @@ CHANGELOG:
 - 2026-10-28 — the New Note button shows its title beside its icon, so it's bigger
 - 2026-10-29 — v1.2: starter folders for an Inbox with no folders yet (fitted and evaluated on sample notes); old Inbox notes offer Archive instead of "No clear match"
 - 2026-10-29 — v1.2.1: folders with fewer than 7 notes need a closer match (fitted on simulated imports from tuning notes, checked on held-out ones)
+- 2026-10-29 — v1.2.2: notes that came with a starter folder don't count toward the 7, so big starter folders stay young too; young threshold refitted to 0.32

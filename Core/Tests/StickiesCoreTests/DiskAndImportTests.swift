@@ -50,6 +50,41 @@ struct TempRoot {
         #expect(f.notes.map(\.text) == ["Second", "First renamed\none"])
     }
 
+    /// Notes that came with a starter folder stay marked through a title
+    /// rename, a save and a reload; one moved out and back counts as filed by hand.
+    @Test func suggestedNotesSurviveRenameAndReload() async throws {
+        let t = try TempRoot()
+        var lib = try LibraryLoader.load(root: t.root)
+        let (cooking, mk) = lib.createFolder(named: "Cooking")
+        var ops = mk
+        let ids = ["Dal\nlentils", "Miso soup\ndashi", "Ribs\nbraise"].map { text -> Note.ID in
+            let id = lib.createNote(in: lib.inbox.id, text: text)!
+            ops += lib.persist(id)
+            return id
+        }
+        for id in ids { ops += lib.move(id, to: cooking) }
+        ops += lib.markSuggested(ids, in: cooking)
+        let byHand = lib.createNote(in: cooking, text: "Pasta")!
+        ops += lib.persist(byHand)
+        #expect(lib.folder(cooking)?.filedByHand == 1)
+
+        lib.setText(ids[0], "Red lentil dal\nlentils")
+        ops += lib.persist(ids[0])
+        ops += lib.move(ids[1], to: lib.inbox.id)
+        ops += lib.move(ids[1], to: cooking)
+        #expect(lib.folder(cooking)?.filedByHand == 2, "moved out and back by hand")
+        #expect(await t.disk.run(ops).isEmpty)
+
+        let reloaded = try LibraryLoader.load(root: t.root)
+        let f = try #require(reloaded.folder(named: "Cooking"))
+        #expect(f.notes.count == 4)
+        #expect(f.filedByHand == 2)
+        #expect(Set(f.notes.filter { f.suggestedNotes.contains($0.id) }.map(\.title)) == ["Red lentil dal", "Ribs"])
+        // A reload merged into the open library keeps the marks on the same notes.
+        let merged = lib.merged(withDisk: reloaded)
+        #expect(merged.folder(cooking)?.suggestedNotes == [ids[0], ids[2]])
+    }
+
     @Test func reloadKeepsIDsAndUnsavedText() async throws {
         let t = try TempRoot()
         var lib = try LibraryLoader.load(root: t.root)

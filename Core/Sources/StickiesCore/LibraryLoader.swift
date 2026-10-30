@@ -24,7 +24,9 @@ public enum LibraryLoader {
             let name = dir.lastPathComponent
             let notes = try loadNotes(in: dir, order: entries[name]?.order ?? [], fm: fm)
             let defaultColor: FolderColor = name == Library.inboxName ? .paper : name == Library.archiveName ? .stone : .butter
-            folders.append(Folder(name: name, color: entries[name]?.color ?? defaultColor, notes: notes))
+            let suggestedFiles = Set(entries[name]?.suggested ?? [])
+            folders.append(Folder(name: name, color: entries[name]?.color ?? defaultColor, notes: notes,
+                                  suggestedNotes: Set(notes.filter { suggestedFiles.contains($0.fileName) }.map(\.id))))
         }
 
         // Folder order: as in the index, then unknown ones alphabetically.

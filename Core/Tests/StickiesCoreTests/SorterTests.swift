@@ -41,6 +41,27 @@ struct NoEmbedder: SentenceEmbedder {
         #expect(Sorter(embedder: NoEmbedder()).suggest(notes: [(id, note)], folders: grown)[id]?.folder == "Cooking")
     }
 
+    /// A folder made from a starter group is young however big it is, until
+    /// you've filed notes into it yourself. Scores 0.28: between the normal
+    /// and the young thresholds.
+    @Test func starterNotesDontCountAsFiledByHand() {
+        func analysis(suggested: Int) -> NoteAnalysis {
+            NoteAnalysis(wordCount: 20, matches: [
+                .init(folder: "Cooking", noteCount: 9, suggestedNotes: suggested, words: 0.28, meanMeaning: nil,
+                      nearestMeaning: nil, nearestTitle: nil, sharedTerms: ["miso"]),
+                .init(folder: "Mountains", noteCount: 9, suggestedNotes: 0, words: 0.05, meanMeaning: nil,
+                      nearestMeaning: nil, nearestTitle: nil, sharedTerms: []),
+            ])
+        }
+        let s = Sorter(embedder: nil)
+        guard case let .noClearMatch(reason) = s.decide(analysis(suggested: 9)) else { Issue.record("expected no match"); return }
+        #expect(reason.contains("haven't filed any notes there yourself"))
+        guard case let .noClearMatch(some) = s.decide(analysis(suggested: 5)) else { Issue.record("expected no match"); return }
+        #expect(some.contains("filed only 4 notes there yourself"))
+        #expect(s.decide(analysis(suggested: 2)).folder == "Cooking", "7 filed by hand: grown")
+        #expect(s.decide(analysis(suggested: 9).countingEveryNoteAsFiledByHand()).folder == "Cooking", "v1.2.1 counted them")
+    }
+
     @Test func strictnessMovesTheYoungThresholdToo() {
         let c = SorterConfig.standard.shifted(by: 0.05)
         #expect(c.threshold(forFolderOf: 3) == SorterConfig.standard.youngThreshold + 0.05)

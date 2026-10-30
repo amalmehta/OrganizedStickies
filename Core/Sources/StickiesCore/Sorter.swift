@@ -110,7 +110,7 @@ public struct SorterConfig: Sendable, Equatable {
     public var youngThreshold: Double
 
     public init(wordWeight: Double, nearestWeight: Double, threshold: Double, margin: Double, minRatio: Double = 1, shortWords: Int = 7,
-                matureNotes: Int = 7, youngThreshold: Double = 0.33) {
+                matureNotes: Int = 7, youngThreshold: Double = 0.32) {
         self.wordWeight = wordWeight
         self.nearestWeight = nearestWeight
         self.threshold = threshold
@@ -154,9 +154,15 @@ public enum SortOutcome: Sendable, Equatable {
 public struct SortCandidate: Sendable {
     public let name: String
     public let notes: [String]
-    public init(name: String, notes: [String]) {
+    /// How many of `notes` arrived with a starter-folder suggestion. They
+    /// don't count toward the folder being grown: a suggested group can mix
+    /// topics, and only notes you filed yourself show what it's for.
+    public let suggestedNotes: Int
+
+    public init(name: String, notes: [String], suggestedNotes: Int = 0) {
         self.name = name
         self.notes = notes
+        self.suggestedNotes = suggestedNotes
     }
 }
 
@@ -167,6 +173,10 @@ public struct NoteAnalysis: Sendable {
         public let folder: String
         /// How many notes the folder holds.
         public let noteCount: Int
+        /// How many of them arrived with a starter-folder suggestion.
+        public let suggestedNotes: Int
+        /// Notes filed by hand: what decides whether the folder is young.
+        public var filedByHand: Int { noteCount - suggestedNotes }
         public let words: Double
         public let meanMeaning: Double?
         public let nearestMeaning: Double?
@@ -175,6 +185,15 @@ public struct NoteAnalysis: Sendable {
     }
     public let wordCount: Int
     public let matches: [FolderMatch]
+
+    /// The same analysis as if every note had been filed by hand, as before
+    /// v1.2.2 (for comparing versions in SorterEval).
+    public func countingEveryNoteAsFiledByHand() -> NoteAnalysis {
+        NoteAnalysis(wordCount: wordCount, matches: matches.map {
+            FolderMatch(folder: $0.folder, noteCount: $0.noteCount, suggestedNotes: 0, words: $0.words, meanMeaning: $0.meanMeaning,
+                        nearestMeaning: $0.nearestMeaning, nearestTitle: $0.nearestTitle, sharedTerms: $0.sharedTerms)
+        })
+    }
 }
 
 public struct Sorter: Sendable {
@@ -278,7 +297,8 @@ public struct Sorter: Sendable {
                         if s > (nearest ?? -1) { nearest = s; nearestTitle = item.title }
                     }
                 }
-                return .init(folder: folders[fi].name, noteCount: folders[fi].notes.count, words: TermVector.cosine(tv, folderVectors[fi]),
+                return .init(folder: folders[fi].name, noteCount: folders[fi].notes.count,
+                             suggestedNotes: min(folders[fi].suggestedNotes, folders[fi].notes.count), words: TermVector.cosine(tv, folderVectors[fi]),
                              meanMeaning: mean, nearestMeaning: nearest, nearestTitle: nearestTitle,
                              sharedTerms: TermVector.shared(tv, folderVectors[fi]))
             }
@@ -308,9 +328,13 @@ public struct Sorter: Sendable {
         if s1 < config.threshold {
             return .noClearMatch(reason: "Nothing here looks much like it. The closest is \(best.folder).")
         }
-        if s1 < config.threshold(forFolderOf: best.noteCount) {
-            let notes = best.noteCount == 1 ? "1 note" : "\(best.noteCount) notes"
-            return .noClearMatch(reason: "Maybe \(best.folder), but it has only \(notes), so it needs a closer match.")
+        if s1 < config.threshold(forFolderOf: best.filedByHand) {
+            let n = best.filedByHand
+            if best.suggestedNotes > 0 {
+                let filed = n == 0 ? "you haven't filed any notes there yourself yet" : "you've filed only \(n == 1 ? "1 note" : "\(n) notes") there yourself"
+                return .noClearMatch(reason: "Maybe \(best.folder), but \(filed), so it needs a closer match.")
+            }
+            return .noClearMatch(reason: "Maybe \(best.folder), but it has only \(n == 1 ? "1 note" : "\(n) notes"), so it needs a closer match.")
         }
         if s1 - s2 < config.margin || (s2 > 0 && s1 / s2 < config.minRatio) {
             return .noClearMatch(reason: "It could be \(best.folder) or \(ranked[1].0.folder). Too close to call.")
