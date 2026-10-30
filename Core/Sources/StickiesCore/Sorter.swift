@@ -102,23 +102,39 @@ public struct SorterConfig: Sendable, Equatable {
     public var minRatio: Double
     /// Notes with this many words or fewer need a shared word, too.
     public var shortWords: Int
+    /// A folder with fewer notes than this is young: it needs a closer match.
+    public var matureNotes: Int
+    /// Minimum score for a suggestion into a young folder. Few notes say
+    /// little about a topic, and in a first import many notes belong to
+    /// topics with no folder yet, which then drift to the nearest young one.
+    public var youngThreshold: Double
 
-    public init(wordWeight: Double, nearestWeight: Double, threshold: Double, margin: Double, minRatio: Double = 1, shortWords: Int = 7) {
+    public init(wordWeight: Double, nearestWeight: Double, threshold: Double, margin: Double, minRatio: Double = 1, shortWords: Int = 7,
+                matureNotes: Int = 7, youngThreshold: Double = 0.33) {
         self.wordWeight = wordWeight
         self.nearestWeight = nearestWeight
         self.threshold = threshold
         self.margin = margin
         self.minRatio = minRatio
         self.shortWords = shortWords
+        self.matureNotes = matureNotes
+        self.youngThreshold = youngThreshold
     }
 
     /// Fitted on the "tune" half of SampleNotes.json; checked on the "check" half.
+    /// The young-folder numbers come from simulated first imports (see `SorterEval`).
     public static let standard = SorterConfig(wordWeight: 0.7, nearestWeight: 0.75, threshold: 0.25, margin: 0, minRatio: 1.0)
+
+    /// The minimum score for a suggestion into a folder with this many notes.
+    public func threshold(forFolderOf notes: Int) -> Double {
+        notes < matureNotes ? max(threshold, youngThreshold) : threshold
+    }
 
     /// Settings' strictness slider maps to a threshold shift.
     public func shifted(by strictness: Double) -> SorterConfig {
         var c = self
         c.threshold += strictness
+        c.youngThreshold += strictness
         c.minRatio = max(1, minRatio + strictness)
         return c
     }
@@ -149,6 +165,8 @@ public struct SortCandidate: Sendable {
 public struct NoteAnalysis: Sendable {
     public struct FolderMatch: Sendable {
         public let folder: String
+        /// How many notes the folder holds.
+        public let noteCount: Int
         public let words: Double
         public let meanMeaning: Double?
         public let nearestMeaning: Double?
@@ -260,7 +278,7 @@ public struct Sorter: Sendable {
                         if s > (nearest ?? -1) { nearest = s; nearestTitle = item.title }
                     }
                 }
-                return .init(folder: folders[fi].name, words: TermVector.cosine(tv, folderVectors[fi]),
+                return .init(folder: folders[fi].name, noteCount: folders[fi].notes.count, words: TermVector.cosine(tv, folderVectors[fi]),
                              meanMeaning: mean, nearestMeaning: nearest, nearestTitle: nearestTitle,
                              sharedTerms: TermVector.shared(tv, folderVectors[fi]))
             }
@@ -289,6 +307,10 @@ public struct Sorter: Sendable {
         }
         if s1 < config.threshold {
             return .noClearMatch(reason: "Nothing here looks much like it. The closest is \(best.folder).")
+        }
+        if s1 < config.threshold(forFolderOf: best.noteCount) {
+            let notes = best.noteCount == 1 ? "1 note" : "\(best.noteCount) notes"
+            return .noClearMatch(reason: "Maybe \(best.folder), but it has only \(notes), so it needs a closer match.")
         }
         if s1 - s2 < config.margin || (s2 > 0 && s1 / s2 < config.minRatio) {
             return .noClearMatch(reason: "It could be \(best.folder) or \(ranked[1].0.folder). Too close to call.")

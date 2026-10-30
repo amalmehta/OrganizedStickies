@@ -13,13 +13,38 @@ struct NoEmbedder: SentenceEmbedder {
         SortCandidate(name: "Mountains", notes: ["Avalanche forecast\nconsiderable above treeline", "Ice screws\nsharpen before the trip"]),
     ]
 
+    /// The folders above hold 2 notes each; this counts them as mature.
+    var matureConfig: SorterConfig {
+        var c = SorterConfig.standard
+        c.matureNotes = 1
+        return c
+    }
+
     @Test func clearWordOverlapSuggests() {
-        let s = Sorter(embedder: NoEmbedder())
+        let s = Sorter(config: matureConfig, embedder: NoEmbedder())
         let id = UUID()
         let out = s.suggest(notes: [(id, "Miso glaze\nginger, garlic and miso for the ribs")], folders: folders)
         guard case let .suggest(folder, _, reason)? = out[id] else { Issue.record("expected a suggestion"); return }
         #expect(folder == "Cooking")
         #expect(reason.contains("miso") || reason.contains("ginger"))
+    }
+
+    /// A folder with few notes needs a closer match, and says why it held back.
+    @Test func youngFolderNeedsACloserMatch() {
+        let note = "Miso glaze\nginger, garlic and miso for the ribs"
+        let id = UUID()
+        let young = Sorter(embedder: NoEmbedder()).suggest(notes: [(id, note)], folders: folders)
+        guard case let .noClearMatch(reason)? = young[id] else { Issue.record("expected no match from a 2-note folder"); return }
+        #expect(reason.contains("Cooking") && reason.contains("only 2 notes"))
+
+        let grown = [SortCandidate(name: "Cooking", notes: folders[0].notes + (1...6).map { "Dinner \($0)\nginger, garlic, miso, rice" }), folders[1]]
+        #expect(Sorter(embedder: NoEmbedder()).suggest(notes: [(id, note)], folders: grown)[id]?.folder == "Cooking")
+    }
+
+    @Test func strictnessMovesTheYoungThresholdToo() {
+        let c = SorterConfig.standard.shifted(by: 0.05)
+        #expect(c.threshold(forFolderOf: 3) == SorterConfig.standard.youngThreshold + 0.05)
+        #expect(c.threshold(forFolderOf: 8) == SorterConfig.standard.threshold + 0.05)
     }
 
     @Test func shortNoteWithNoSharedWordsIsNoMatch() {

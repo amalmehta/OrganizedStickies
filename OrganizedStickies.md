@@ -391,6 +391,13 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
   because one-note-to-one-note comparisons with the sentence model were
   barely better than chance. On an Inbox card a folder suggestion still comes
   first, but the Archive offer now replaces "No clear match".
+- Changed 2026-10-29, at my request ("make the sorter stricter with young,
+  small folders so suggestions after starter folders meet the 90% bar"): a
+  folder with fewer than 7 notes needs a closer match (0.33, not 0.25).
+  Fitted on simulated imports from the tuning notes, where 90% of the
+  suggestions are right. On imports from the held-out notes, v1.2's 105
+  suggestions were all wrong, and none are shown now. Big imports can still
+  make starter folders of 7+ mixed notes that draw wrong suggestions.
 - Delivery: local build for macOS 26 or later, signed for this Mac only, in
   /Applications. Code goes to a public GitHub repo, amalmehta/OrganizedStickies.
 - Measured on my real Apple Stickies (word counts only, no text read): 25 notes,
@@ -431,9 +438,9 @@ DEFINITIONS AND DEFERRED:
   the app becomes active), a global hotkey, a Claude API sorter, a website,
   notarized distribution, bundling the Newsreader and Inter fonts (the system
   serif New York and SF stand in), and learning from accepted or rejected
-  suggestions, and a stricter sorter for young, small folders (after starter
-  folders its suggestions for the remaining notes were right about half the
-  time on sample notes). From the 2026-10-27 smoothness list, not picked: a quieter
+  suggestions, and treating folders made from starter groups as young until
+  you've filed notes into them by hand (big imports make starter folders of
+  7+ mixed notes). From the 2026-10-27 smoothness list, not picked: a quieter
   "No clear match" (a ? mark with the reason on hover), stale clocks out of the
   sidebar, spring animations everywhere, expanding a card into a roomy editor,
   folders that fade into each other and keep their scroll position, saving
@@ -513,3 +520,4 @@ CHANGELOG:
 - 2026-10-28 — v1.1.1: the whole window is Liquid Glass, so the desktop really shows through (v1.1's frosted board drew as flat grey on macOS 26)
 - 2026-10-28 — the New Note button shows its title beside its icon, so it's bigger
 - 2026-10-29 — v1.2: starter folders for an Inbox with no folders yet (fitted and evaluated on sample notes); old Inbox notes offer Archive instead of "No clear match"
+- 2026-10-29 — v1.2.1: folders with fewer than 7 notes need a closer match (fitted on simulated imports from tuning notes, checked on held-out ones)

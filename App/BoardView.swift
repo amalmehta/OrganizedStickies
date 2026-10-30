@@ -406,6 +406,7 @@ struct HowSortingWorks: View {
                 Label("**Similar meaning.** Apple's on-device language model places “braise short ribs” near “slow-cook lamb” even with no words in common.", systemImage: "point.3.connected.trianglepath.dotted")
             }
             Text("A folder is suggested only when it clearly beats the others. Short notes like “call mom” usually get **No clear match**. That's on purpose, because a wrong guess is worse than none.")
+            Text("A folder with fewer than \(SorterConfig.standard.matureNotes) notes needs a closer match. A few notes say little about a topic, so new folders get fewer suggestions until you've filed a few more by hand.")
             Text("Everything runs on this Mac. Nothing is sent anywhere, and nothing moves until you click.")
                 .foregroundStyle(Theme.quiet)
             Text("**Rule of thumb:** a sorter is only as good as what it can compare with. A folder with a few clear notes in it attracts the right new ones.")

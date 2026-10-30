@@ -64,7 +64,7 @@ Things tests can't judge. Check these after any visible change:
 - [ ] **First open**: the welcome screen says what to do, and Import shows a clear result line.
 - [ ] **Real notes**: after importing your Apple Stickies, are the suggestions you see right? Count wrong ones. If more than about 1 in 10 are wrong, switch Settings › Sorting to Careful and tell me which ones.
 - [ ] **Stale**: does 14 days flag notes you'd actually archive? Old Inbox notes without a folder suggestion show **Archive** too.
-- [ ] **Starter folders**: right after importing (no folders yet), do the groups make sense, and do their draft names need much renaming? Count groups with a note that doesn't belong. After making them, are the suggestions for the remaining notes right?
+- [ ] **Starter folders**: right after importing (no folders yet), do the groups make sense, and do their draft names need much renaming? Count groups with a note that doesn't belong. After making them, expect few suggestions until a folder has 7 notes (it says "needs a closer match"); are the ones you do get right?
 - [ ] **Dark mode**: cards, chips and the sidebar stay quiet and readable.
 - [ ] **Glass**: drag a colorful window behind the app: its colors show softly through the board, the toolbar strip and the sidebar, and cards still read easily. With System Settings › Accessibility › Display › Reduce transparency on, the board is solid paper.
 - [ ] **Columns**: short notes get short cards. Accepting one card doesn't send the others hopping between columns. Arrow keys move up and down a column, and left and right to the card beside.
