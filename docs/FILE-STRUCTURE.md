@@ -12,7 +12,7 @@ OrganizedStickies/
 │   ├── SidebarView.swift            Folders: counts, stale marker, drop targets, rename/color/delete
 │   ├── BoardView.swift              The grid, header, starter folders panel, "How sorting works", search results
 │   ├── StickyCard.swift             One note: preview, in-place editor, suggestion and stale chips
-│   ├── EmptyStates.swift            Pictures and next steps for empty folders and first run
+│   ├── EmptyStates.swift            Pictures and next steps for empty folders and first run; the import panel
 │   ├── SettingsView.swift           ⌘, (General, Sorting, Import) and the feedback sheet
 │   ├── Theme.swift                  Muted-paper palette (light and dark), fonts, text sizes
 │   ├── Info.plist

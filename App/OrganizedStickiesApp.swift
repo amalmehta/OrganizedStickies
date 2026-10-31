@@ -176,6 +176,9 @@ struct BoardCommands: Commands {
                 .keyboardShortcut("n")
             Button("New Folder") { board.newFolder() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+            Divider()
+            Button("Import from Apple Stickies") { board.importFromAppleStickies() }
+                .disabled(board.importStatus == .working)
         }
         CommandMenu("Note") {
             Button("Edit Note") { if let id = board.selectedNoteID { board.beginEditing(id) } }

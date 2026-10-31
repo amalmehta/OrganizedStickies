@@ -47,7 +47,8 @@ public enum LibraryLoader {
             folders[i].color = c
             used.insert(c)
         }
-        return Library(folders: folders, importedStickies: Set(index?.importedStickies ?? []))
+        return Library(folders: folders, importedStickies: Set(index?.importedStickies ?? []),
+                       importOfferDismissed: index?.importOfferDismissed ?? false)
     }
 
     static func loadNotes(in dir: URL, order: [String], fm: FileManager) throws -> [Note] {

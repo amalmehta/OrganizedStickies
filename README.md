@@ -16,7 +16,7 @@ Sticky notes for the Mac that live in folders on one board instead of scattered 
 - **Stale notes surface.** Anything untouched for 60 days or more offers **Archive**.
 - **⌘Z takes it back.** Moves, Archive, Move to Trash, Move All Suggested, and making or deleting a folder all undo.
 - **Private and free.** Sorting runs on your Mac with Apple's NaturalLanguage framework. No account, no network.
-- **Imports Apple Stickies** as copies. The originals aren't changed.
+- **Imports Apple Stickies** as copies, offered right on the Inbox. The originals aren't changed. macOS asks once whether the app may read them: choose Allow.
 
 ```bash
 ./scripts/install.sh

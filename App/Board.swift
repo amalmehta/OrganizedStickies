@@ -2,6 +2,14 @@ import AppKit
 import Observation
 import StickiesCore
 
+enum ImportStatus: Equatable {
+    case working
+    case done(String)
+    /// macOS refused, which asking again can fix.
+    case notAllowed(String)
+    case failed(String)
+}
+
 /// The app's view of the notes. Edits apply in memory at once; disk work
 /// goes through one serial queue in the background, so the UI never waits.
 @MainActor @Observable
@@ -15,6 +23,7 @@ final class Board {
         didSet { if editingNoteID != oldValue { textUndo.removeAllActions() } }
     }
     var searchText = ""
+    var importStatus: ImportStatus?
     private(set) var suggestions: [Note.ID: SortOutcome] = [:]
     private(set) var isSorting = false
     var dismissedSuggestions: Set<Note.ID> = []
@@ -537,19 +546,78 @@ final class Board {
 
     // MARK: Import and samples
 
-    func importFromAppleStickies() async -> String {
-        do {
-            let stickies = try await Task.detached { try StickiesImporter.read() }.value
-            let (added, ops) = library.addImported(stickies)
-            apply(ops)
-            scheduleSort()
-            if stickies.isEmpty { return "Apple Stickies has no notes to copy." }
-            if added == 0 { return "Already imported. All \(stickies.count) Apple Stickies notes are in your Inbox or filed." }
-            let skipped = stickies.count - added
-            return "Copied \(added) notes into Inbox" + (skipped > 0 ? " (\(skipped) blank or already imported)." : ".") + " Apple Stickies wasn't changed."
-        } catch {
-            return error.localizedDescription
+    /// The offer stays until you import or say no thanks. It can't count your
+    /// Apple Stickies first: reading them at all is what makes macOS ask.
+    var showsImportPanel: Bool {
+        importStatus != nil || (!isDemo && library.importedStickies.isEmpty && !library.importOfferDismissed)
+    }
+
+    func importFromAppleStickies() {
+        guard importStatus != .working else { return }
+        endEditing()
+        selectedFolderID = library.inbox.id
+        selectedNoteID = nil
+        searchText = ""
+        importStatus = .working
+        let args = ProcessInfo.processInfo.arguments
+        let dir = args.firstIndex(of: "-stickiesDir").flatMap { args.indices.contains($0 + 1) ? URL(fileURLWithPath: args[$0 + 1], isDirectory: true) : nil }
+            ?? StickiesImporter.defaultDirectory
+        Task {
+            do {
+                // Waits here while macOS asks, so it runs off the main thread.
+                let read = try await Task.detached { try StickiesImporter.read(from: dir) }.value
+                let (added, ops) = library.addImported(read.notes)
+                apply(ops)
+                // Answering macOS makes the app active, which starts a reload that
+                // can read the folder before these are written and lose them from
+                // the board. One more after the writes puts them back.
+                reload()
+                scheduleSort()
+                importStatus = .done(StickiesImporter.summary(read: read, added: added))
+            } catch StickiesImporter.ImportError.notAllowed {
+                importStatus = .notAllowed(StickiesImporter.ImportError.notAllowed.errorDescription ?? "")
+            } catch {
+                importStatus = .failed(error.localizedDescription)
+            }
         }
+    }
+
+    /// macOS only asks once, and I found no switch for this permission in
+    /// Settings. Forgetting its answer makes it ask again.
+    func askAgainForStickies() {
+        importStatus = .working
+        Task {
+            let forgot = await Task.detached { Self.forgetStickiesAnswer() }.value
+            importStatus = nil
+            if forgot {
+                importFromAppleStickies()
+            } else {
+                importStatus = .failed("macOS wouldn't ask again. Turn on Organized Stickies in System Settings › Privacy & Security › Full Disk Access, then try again.")
+            }
+        }
+    }
+
+    private nonisolated static func forgetStickiesAnswer() -> Bool {
+        let tool = Process()
+        tool.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        tool.arguments = ["reset", "SystemPolicyAppData", Bundle.main.bundleIdentifier ?? ""]
+        tool.standardOutput = FileHandle.nullDevice
+        tool.standardError = FileHandle.nullDevice
+        do {
+            try tool.run()
+            tool.waitUntilExit()
+            return tool.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    /// Closes the result, and says no thanks if the offer was still open.
+    func dismissImportPanel() {
+        if library.importedStickies.isEmpty && !library.importOfferDismissed {
+            apply(library.dismissImportOffer())
+        }
+        importStatus = nil
     }
 
     func addSampleNotes() async {

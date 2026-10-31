@@ -110,6 +110,8 @@ public struct LibraryIndex: Codable, Sendable, Equatable {
     public var folders: [Entry]
     /// Apple Stickies note IDs already copied in, so import never duplicates.
     public var importedStickies: [String]
+    /// Left out unless you said no thanks, so older index files read the same.
+    public var importOfferDismissed: Bool? = nil
 
     public static let fileName = ".organizedstickies.json"
 }

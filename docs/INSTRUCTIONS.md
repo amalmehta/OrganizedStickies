@@ -40,7 +40,7 @@ open "/Applications/Organized Stickies.app" --args -demo -unsorted
 | Search | **⌘F**, or the search field. Searches every folder, Archive included. |
 | Folders | **⇧⌘N** for a new one. Right-click to rename, recolor, show in Finder or delete (its notes move to Inbox first). |
 | Settings | **⌘,**: text size, how many days before "untouched", suggestion strictness, import, sample notes. |
-| Import Apple Stickies | Settings › Import, or the button on the first-run screen. Copies only; Apple Stickies isn't changed. Running it twice doesn't duplicate. |
+| Import Apple Stickies | **Import** on the Inbox until you've imported or said no thanks, then **File › Import from Apple Stickies** or Settings › Import. Copies only; Apple Stickies isn't changed. Running it twice doesn't duplicate. macOS asks once whether the app may read the notes, so choose **Allow**. If you chose Don't Allow, **Ask Again** makes it ask once more. |
 | Feedback | The speech-bubble button at the bottom of the sidebar opens a pre-filled GitHub issue in your browser. |
 
 Your notes live in `~/Documents/Organized Stickies/`, one Markdown file per note and one Finder folder per folder. Edit them in any app; changes appear when you switch back.
@@ -62,7 +62,8 @@ Things tests can't judge. Check these after any visible change:
 
 - [ ] **Feel**: typing in a card keeps up with fast typing, with no lag or dropped characters (try a 400-word note).
 - [ ] **Smoothness**: scrolling Inbox with 40+ cards holds the frame rate. Moving a card animates without a jump. Switching folders has no flicker.
-- [ ] **First open**: the welcome screen says what to do, and Import shows a clear result line.
+- [ ] **First open**: the welcome screen says what to do, the sidebar shows Inbox and Archive, and Import shows a clear result line.
+- [ ] **Import**: after a reinstall, Import makes macOS ask again. Allow copies the notes and says how many. The board shows the notes straight away, not the welcome screen. If macOS really refuses, the panel says so and offers **Ask Again** (so far only seen with a locked test folder).
 - [ ] **Real notes**: after importing your Apple Stickies, are the suggestions you see right? Count wrong ones. If more than about 1 in 10 are wrong, switch Settings › Sorting to Careful and tell me which ones.
 - [ ] **Undo**: the Edit menu names what it will undo ("Undo Move", "Undo Move All Suggested"). Undoing a Move to Trash brings the note back and leaves no copy in the Trash.
 - [ ] **Stale**: does 60 days flag notes you'd actually archive? Old Inbox notes without a folder suggestion show **Archive** too.

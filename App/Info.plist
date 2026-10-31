@@ -24,6 +24,8 @@
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSAppDataUsageDescription</key>
+	<string>Lets Organized Stickies copy your Apple Stickies notes into its Inbox. Apple Stickies isn't changed.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Amal Mehta</string>
 </dict>

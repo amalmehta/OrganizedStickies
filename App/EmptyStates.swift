@@ -20,7 +20,6 @@ struct EmptyStateView: View {
                 .foregroundStyle(Theme.quiet)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
-                .fixedSize(horizontal: false, vertical: true)
             if let actions { actions.padding(.top, 4) }
         }
         .padding(32)
@@ -86,7 +85,6 @@ struct FolderEmptyState: View {
 /// First run: no notes anywhere.
 struct WelcomeView: View {
     @Environment(Board.self) private var board
-    @State private var status: String?
     @State private var working = false
 
     var body: some View {
@@ -96,10 +94,7 @@ struct WelcomeView: View {
             message: "Copy your Apple Stickies in (the originals stay untouched), try a set of sample notes, or write your first one. Each note is a plain text file in Documents › Organized Stickies.",
             actions: AnyView(VStack(spacing: 10) {
                 HStack(spacing: 10) {
-                    Button {
-                        working = true
-                        Task { status = await board.importFromAppleStickies(); working = false }
-                    } label: { Label("Import from Apple Stickies", systemImage: "square.and.arrow.down") }
+                    Button { board.importFromAppleStickies() } label: { Label("Import from Apple Stickies", systemImage: "square.and.arrow.down") }
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("importStickies")
                     Button {
@@ -109,10 +104,98 @@ struct WelcomeView: View {
                         .accessibilityIdentifier("addSamples")
                     Button { board.newNote() } label: { Label("New Note", systemImage: "square.and.pencil") }
                 }
-                .disabled(working)
-                if let status {
-                    Text(status).font(.callout).foregroundStyle(Theme.quiet)
-                }
+                .disabled(working || board.importStatus == .working)
+                ImportStatusLine()
             }))
+    }
+}
+
+/// What an import is doing or did. Shown wherever you can start one.
+struct ImportStatusLine: View {
+    @Environment(Board.self) private var board
+
+    var body: some View {
+        switch board.importStatus {
+        case nil:
+            EmptyView()
+        case .working:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                line("Copying. If macOS asks, choose Allow so this app can read Apple Stickies' notes.")
+            }
+        case let .done(message):
+            line(message)
+        case let .failed(message):
+            line(message)
+        case let .notAllowed(message):
+            HStack(spacing: 10) {
+                line(message)
+                Button("Ask Again") { board.askAgainForStickies() }
+                    .accessibilityIdentifier("importAskAgain")
+                    .help("Makes macOS ask once more whether this app can read Apple Stickies' notes")
+            }
+        }
+    }
+
+    private func line(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(Theme.quiet)
+            .accessibilityIdentifier("importStatus")
+    }
+}
+
+/// Above the Inbox until you've imported or said no thanks. With a few notes
+/// typed in, the first-run screen and its Import button are gone.
+struct ImportPanel: View {
+    @Environment(Board.self) private var board
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "square.and.arrow.down")
+                .font(.system(size: 17))
+                .foregroundStyle(Theme.quiet)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                if board.importStatus == nil {
+                    Text("Bring in your Apple Stickies")
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Copies them into Inbox as plain text, with their dates. Apple Stickies isn't changed. macOS asks you to allow this once.")
+                        .font(.callout)
+                        .foregroundStyle(Theme.quiet)
+                } else {
+                    ImportStatusLine()
+                }
+            }
+            Spacer(minLength: 0)
+            if board.importStatus == nil {
+                Button("Import") { board.importFromAppleStickies() }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("importOfferButton")
+            }
+            if board.importStatus != .working {
+                Button(board.importStatus == nil ? "No Thanks" : "Close") { board.dismissImportPanel() }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Theme.quiet)
+                    .accessibilityIdentifier("importOfferDismiss")
+                    .help(board.importStatus == nil ? "You can still import from the File menu" : "")
+            }
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.window.opacity(0.55))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Theme.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("importOffer")
+        // Not fixedSize on its text: outside a scroll view, that gets measured at
+        // the split view's narrowest and pushes the whole window's content off screen.
+        .layoutPriority(1)
     }
 }

@@ -103,15 +103,14 @@ private struct ImportSettings: View {
         Form {
             Section {
                 HStack {
-                    Button {
-                        working = true
-                        Task { status = await board.importFromAppleStickies(); working = false }
-                    } label: { Label("Import from Apple Stickies", systemImage: "square.and.arrow.down") }
+                    Button { board.importFromAppleStickies() } label: { Label("Import from Apple Stickies", systemImage: "square.and.arrow.down") }
+                        .disabled(board.importStatus == .working)
                     if working { ProgressView().controlSize(.small) }
                 }
-                Text("Copies every Apple Stickies note into Inbox as plain text, keeping its last-edited date. Apple Stickies isn't changed, and notes already copied are skipped. Colors and formatting aren't kept: here, color shows the folder. macOS may ask once to let this app read Stickies' data.")
+                Text("Copies every Apple Stickies note into Inbox as plain text, keeping its last-edited date. Apple Stickies isn't changed, and notes already copied are skipped. Colors and formatting aren't kept: here, color shows the folder. macOS asks once to let this app read Stickies' data: choose Allow.")
                     .font(.caption)
                     .foregroundStyle(Theme.quiet)
+                ImportStatusLine()
                 if let status {
                     Text(status).font(.callout)
                 }

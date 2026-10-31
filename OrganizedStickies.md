@@ -364,6 +364,8 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
 - Storage: plain Markdown files in real Finder folders under
   ~/Documents/Organized Stickies/.
 - Import: copy from Apple Stickies with one click; the originals are never changed.
+  Offered on the Inbox until you import or say no thanks (2026-10-31), since the
+  first-run button goes away as soon as you've typed a note.
 - Changed during the build (2026-10-26): the board is one AppKit window
   (SwiftUI's scene window sometimes didn't open at launch); cards are a single
   VoiceOver element each, with named actions.
@@ -460,7 +462,8 @@ DEFINITIONS AND DEFERRED:
   2026-10-29 and 2026-10-30 lists, not picked: quick capture from a global
   hotkey, a menu bar glance at one folder, "Not there" teaching the sorter,
   dismissals remembered across launches, search by words in any order, and
-  removing the Careful / Eager picker. Undo doesn't yet cover text after its
+  removing the Careful / Eager picker, and new Apple Stickies notes offered
+  automatically after the first import. Undo doesn't yet cover text after its
   editor closes, renaming or recoloring a folder, new notes, or import, and
   its history ends when the app quits.
 
@@ -542,3 +545,4 @@ CHANGELOG:
 - 2026-10-29 — v1.2.2: notes that came with a starter folder don't count toward the 7, so big starter folders stay young too; young threshold refitted to 0.32
 - 2026-10-30 — v1.3: undo and redo for moves, Archive, Move to Trash, Move All Suggested, making a starter folder and deleting a folder; stale default raised from 14 to 60 days
 - 2026-10-30 — the app's version number now says 1.2.2 (it had stayed at 1.0); project.yml sets it, and Info.plist reads it from there
+- 2026-10-31 — v1.3.1: the Inbox offers to import Apple Stickies, also in the File menu; import says what to do while macOS asks and when it refuses, with Ask Again; a blank Sticky comes across once it has words; the first-run screen no longer pushes the sidebar and board off screen

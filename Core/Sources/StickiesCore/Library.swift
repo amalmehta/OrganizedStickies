@@ -22,10 +22,13 @@ public struct Library: Sendable, Equatable {
     /// Inbox first, then user folders, Archive last.
     public var folders: [Folder]
     public var importedStickies: Set<String>
+    /// You said no thanks to importing from Apple Stickies.
+    public var importOfferDismissed: Bool
 
-    public init(folders: [Folder], importedStickies: Set<String> = []) {
+    public init(folders: [Folder], importedStickies: Set<String> = [], importOfferDismissed: Bool = false) {
         self.folders = folders
         self.importedStickies = importedStickies
+        self.importOfferDismissed = importOfferDismissed
         normalize()
     }
 
@@ -71,7 +74,8 @@ public struct Library: Sendable, Equatable {
                 return .init(name: f.name, color: f.color, order: f.notes.compactMap { $0.isOnDisk ? $0.fileName : nil },
                              suggested: suggested.isEmpty ? nil : suggested)
             },
-            importedStickies: importedStickies.sorted()
+            importedStickies: importedStickies.sorted(),
+            importOfferDismissed: importOfferDismissed ? true : nil
         )
     }
 
@@ -328,8 +332,9 @@ public struct Library: Sendable, Equatable {
         var ops: [DiskOp] = []
         var added = 0
         for s in stickies.sorted(by: { $0.modified > $1.modified }).reversed() where !importedStickies.contains(s.id) {
-            importedStickies.insert(s.id)
+            // A blank note isn't remembered, so it comes across once it has words.
             guard !s.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            importedStickies.insert(s.id)
             let name = NoteNaming.uniqueFileName(
                 base: NoteNaming.baseName(for: s.text),
                 taken: Set(folders[fi].notes.map(\.fileName)))
@@ -339,6 +344,11 @@ public struct Library: Sendable, Equatable {
         }
         ops.append(.saveIndex(index))
         return (added, ops)
+    }
+
+    public mutating func dismissImportOffer() -> [DiskOp] {
+        importOfferDismissed = true
+        return [.saveIndex(index)]
     }
 
     // MARK: Reload

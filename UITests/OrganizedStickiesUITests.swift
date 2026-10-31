@@ -225,6 +225,88 @@ final class OrganizedStickiesUITests: XCTestCase {
         XCTAssertFalse(note("Miso cod").exists)
     }
 
+    private func byID(_ id: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: id).firstMatch
+    }
+
+    /// Relaunches on its own library with a pretend Apple Stickies folder, so
+    /// these never read the real one.
+    private func relaunch(root: String, stickies: String) {
+        app.terminate()
+        app.launchArguments = ["-root", root, "-stickiesDir", stickies]
+        app.launch()
+    }
+
+    private func tempPath(_ name: String) -> String {
+        FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-\(UUID().uuidString)").path
+    }
+
+    private func typeANote() {
+        app.buttons["newNoteButton"].click()
+        let editor = app.textViews["noteEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.typeText("Racket restring")
+        editor.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(note("Racket restring").waitForExistence(timeout: 5))
+    }
+
+    /// With a note typed in, the first-run screen is gone: the Inbox offers it instead.
+    func testImportOfferCopiesStickiesAndStaysGone() throws {
+        XCTAssertFalse(byID("importOffer").exists, "demo mode has nothing to import")
+        let stickies = tempPath("OSStickies")
+        let package = URL(fileURLWithPath: stickies).appendingPathComponent("A1.rtfd")
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        try "{\\rtf1\\ansi Bike tune up\\par new chain}".write(to: package.appendingPathComponent("TXT.rtf"), atomically: true, encoding: .utf8)
+        let root = tempPath("OSImport")
+        relaunch(root: root, stickies: stickies)
+        typeANote()
+        XCTAssertTrue(byID("importOffer").waitForExistence(timeout: 5))
+        byID("importOfferButton").click()
+        XCTAssertTrue(note("Bike tune up").waitForExistence(timeout: 10))
+        XCTAssertTrue(byID("importStatus").waitForExistence(timeout: 5))
+        byID("importOfferDismiss").click()
+        XCTAssertTrue(byID("importOffer").waitForNonExistence(timeout: 5))
+        relaunch(root: root, stickies: stickies)
+        XCTAssertTrue(note("Bike tune up").waitForExistence(timeout: 5))
+        RunLoop.current.run(until: .now.addingTimeInterval(1))
+        XCTAssertFalse(byID("importOffer").exists, "imported already, so no offer")
+    }
+
+    /// No thanks lasts across launches, and the File menu still has it.
+    func testNoThanksIsRememberedAndFileMenuStillImports() {
+        let root = tempPath("OSNoThanks")
+        let stickies = tempPath("OSNoStickies")
+        relaunch(root: root, stickies: stickies)
+        typeANote()
+        XCTAssertTrue(byID("importOffer").waitForExistence(timeout: 5))
+        byID("importOfferDismiss").click()
+        XCTAssertTrue(byID("importOffer").waitForNonExistence(timeout: 5))
+        relaunch(root: root, stickies: stickies)
+        XCTAssertTrue(note("Racket restring").waitForExistence(timeout: 5))
+        RunLoop.current.run(until: .now.addingTimeInterval(1))
+        XCTAssertFalse(byID("importOffer").exists)
+        // That folder doesn't exist, so the panel comes back with the reason and no Ask Again.
+        let item = app.menuBars.menuItems["Import from Apple Stickies"]
+        XCTAssertTrue(item.waitForExistence(timeout: 5))
+        item.click()
+        XCTAssertTrue(byID("importStatus").waitForExistence(timeout: 5))
+        XCTAssertFalse(byID("importAskAgain").exists)
+    }
+
+    /// A refusal says so and offers Ask Again. Not clicked here: it resets a real permission.
+    func testARefusalOffersAskAgain() throws {
+        let stickies = tempPath("OSLockedStickies")
+        try FileManager.default.createDirectory(atPath: stickies, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: stickies)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stickies) }
+        relaunch(root: tempPath("OSRefused"), stickies: stickies)
+        typeANote()
+        XCTAssertTrue(byID("importOfferButton").waitForExistence(timeout: 5))
+        byID("importOfferButton").click()
+        XCTAssertTrue(byID("importAskAgain").waitForExistence(timeout: 5))
+        XCTAssertTrue(byID("importStatus").exists)
+    }
+
     /// Type, quit at once (before the 0.5 s save delay), relaunch: the text is there.
     func testQuitMidTypingKeepsText() {
         app.terminate()

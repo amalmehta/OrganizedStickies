@@ -60,3 +60,12 @@
    → Built undo as changes that return their own reverse, tested on a real temp folder. The first try used the window delegate, which Edit › Undo never reached, so undo now lives on a small window subclass, with typing undo kept separate. Deleting a folder undoes too, so earlier steps never lose a folder they need. Raised the stale default to 60 days after recounting: 14 days flags 22 of the 25 Apple Stickies and 60 flags 12, not the 21 and about 10 said in the list. The full UI run then caught ⌘Z doing nothing while typing, with typing steps landing on the board's history: SwiftUI's editor keeps the undo manager it was given first. Fixed that and added a test for the search field.
 4. "Commit and push v1.3."
    → Committed and pushed.
+
+## 2026-10-31 — Getting Apple Stickies in
+
+1. "0,1,1"
+   → Looked at the app, the code and the real library (counts and dates only): still 2 notes and nothing imported, with an import attempt from 2026-10-27 never explained ("After clicking Import it said:"). Listed 1 add (an import offer on the board) and 1 improvement (make import work in the installed app), and built nothing.
+2. "Build add #1 (import offer on the board) and improve #1 (make import work in the installed app)."
+   → Tried the installed app on a temporary library: macOS asks whether the app may read another app's data, and once allowed, 24 of 25 notes copied (one blank) with their dates. So the importer worked; what failed was everything around the prompt: silence while it waited, a raw error if refused, no way to be asked again, and a button that vanishes once you've typed a note. Built the Inbox offer, a File menu item, clear messages and Ask Again. The offer names no count, because reading Apple Stickies is what makes macOS ask. Trying the panel found the first-run screen pushing the sidebar and board off the top of the window, from `fixedSize` text outside a scroll view; two wrong guesses first (saved split-view frames, then the window sizing itself to its content), found by logging real view sizes. The real refusal test showed two more things: answering macOS's question could leave the board empty beside "Copied 24 notes", because the reload it triggers read the folder before the writes finished (fixed), and choosing Don't Allow didn't stop the copy, for a reason not yet known (reported, and recorded as a known limit). Didn't import into the real library: that stays one click for me.
+3. "Commit and push v1.3.1."
+   → Committed and pushed.

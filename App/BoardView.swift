@@ -31,6 +31,12 @@ struct BoardView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 18)
                 .padding(.bottom, 10)
+            if folder.kind == .inbox && board.hasAnyNotes && board.showsImportPanel {
+                ImportPanel()
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
+            }
             if folder.notes.isEmpty {
                 if !board.hasAnyNotes && folder.kind == .inbox {
                     WelcomeView()
@@ -41,6 +47,7 @@ struct BoardView: View {
                 grid(folder)
             }
         }
+        .animation(.easeOut(duration: 0.2), value: board.showsImportPanel)
         .dropDestination(for: String.self) { items, _ in
             // Notes dropped on empty board space go to the end of this folder;
             // text dragged in from another app becomes a new note.

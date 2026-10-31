@@ -181,7 +181,7 @@ struct TempRoot {
     var fixtures: URL { Bundle.module.url(forResource: "Fixtures", withExtension: nil)!.appendingPathComponent("Stickies") }
 
     @Test func readsRtfdNotesAsPlainText() throws {
-        let notes = try StickiesImporter.read(from: fixtures)
+        let notes = try StickiesImporter.read(from: fixtures).notes
         #expect(notes.count == 3)
         let ppo = try #require(notes.first { $0.id == "B2" })
         #expect(ppo.text == "PPO reward shaping\nthe policy keeps exploiting the contact sensor bonus")
@@ -191,8 +191,77 @@ struct TempRoot {
     }
 
     @Test func missingDirectoryIsAClearError() {
-        #expect(throws: StickiesImporter.ImportError.self) {
+        #expect(throws: StickiesImporter.ImportError.notFound) {
             try StickiesImporter.read(from: URL(fileURLWithPath: "/nonexistent/Stickies"))
         }
+    }
+
+    private func tempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("StickiesImport-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// The same kind of error a refused permission gives: nothing can list the folder.
+    @Test func aFolderItCantReadSaysMacOSRefused() throws {
+        let dir = try tempDir()
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        #expect(throws: StickiesImporter.ImportError.notAllowed) { try StickiesImporter.read(from: dir) }
+    }
+
+    @Test func refusalsAreToldApartFromMissingFiles() {
+        func cocoa(_ code: Int, posix: Int32) -> NSError {
+            NSError(domain: NSCocoaErrorDomain, code: code,
+                    userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(posix))])
+        }
+        #expect(StickiesImporter.classify(cocoa(NSFileReadNoPermissionError, posix: EPERM)) == .notAllowed)
+        #expect(StickiesImporter.classify(cocoa(NSFileReadUnknownError, posix: EACCES)) == .notAllowed)
+        #expect(StickiesImporter.classify(cocoa(NSFileReadNoSuchFileError, posix: ENOENT)) == .notFound)
+    }
+
+    @Test func notesThatWontOpenAreCountedNotDropped() throws {
+        let dir = try tempDir()
+        try FileManager.default.copyItem(at: fixtures.appendingPathComponent("B2.rtfd"), to: dir.appendingPathComponent("B2.rtfd"))
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("Empty.rtfd"), withIntermediateDirectories: true)
+        let read = try StickiesImporter.read(from: dir)
+        #expect(read.notes.map(\.id) == ["B2"])
+        #expect(read.unreadable == 1)
+    }
+
+    @Test func aFolderOfOnlyBrokenNotesIsAnErrorNotZeroNotes() throws {
+        let dir = try tempDir()
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("Empty.rtfd"), withIntermediateDirectories: true)
+        #expect(throws: StickiesImporter.ImportError.unreadable("none of its 1 notes could be opened.")) {
+            try StickiesImporter.read(from: dir)
+        }
+    }
+
+    @Test func theSummarySaysWhatHappened() {
+        let read = { (n: Int, bad: Int) in
+            StickiesImporter.Reading(notes: (0..<n).map { ImportedSticky(id: "\($0)", text: "x", modified: .now) }, unreadable: bad)
+        }
+        #expect(StickiesImporter.summary(read: read(0, 0), added: 0) == "Apple Stickies has no notes to copy.")
+        #expect(StickiesImporter.summary(read: read(1, 0), added: 1) == "Copied 1 note into Inbox. Apple Stickies wasn't changed.")
+        #expect(StickiesImporter.summary(read: read(25, 0), added: 24) == "Copied 24 notes into Inbox (1 blank or already here). Apple Stickies wasn't changed.")
+        #expect(StickiesImporter.summary(read: read(3, 2), added: 3) == "Copied 3 notes into Inbox. 2 couldn't be opened. Apple Stickies wasn't changed.")
+        #expect(StickiesImporter.summary(read: read(3, 0), added: 0).hasPrefix("Nothing new to copy"))
+    }
+
+    @Test func aBlankNoteComesAcrossOnceItHasWords() {
+        var lib = Library.empty()
+        #expect(lib.addImported([ImportedSticky(id: "u1", text: "  ", modified: .now)]).added == 0)
+        #expect(lib.importedStickies.isEmpty)
+        #expect(lib.addImported([ImportedSticky(id: "u1", text: "Now it has words", modified: .now)]).added == 1)
+    }
+
+    @Test func noThanksIsRememberedInTheIndex() throws {
+        var lib = Library.empty()
+        #expect(lib.index.importOfferDismissed == nil)
+        let ops = lib.dismissImportOffer()
+        #expect(lib.importOfferDismissed)
+        guard case let .saveIndex(index) = try #require(ops.first) else { Issue.record("expected an index save"); return }
+        let data = try JSONEncoder().encode(index)
+        #expect(try JSONDecoder().decode(LibraryIndex.self, from: data).importOfferDismissed == true)
     }
 }
