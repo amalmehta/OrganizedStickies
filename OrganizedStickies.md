@@ -359,8 +359,8 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
 - Smart sorting: done on this Mac (Apple's NaturalLanguage framework, no
   network, no cost). It only suggests a folder; I confirm. When it isn't sure
   it says "No clear match" and the note stays in Inbox.
-- Stale: a note untouched for 14 days or more gets a suggestion to move to
-  Archive. It is never moved automatically.
+- Stale: a note untouched for 60 days or more (14 until 2026-10-30) gets a
+  suggestion to move to Archive. It is never moved automatically.
 - Storage: plain Markdown files in real Finder folders under
   ~/Documents/Organized Stickies/.
 - Import: copy from Apple Stickies with one click; the originals are never changed.
@@ -405,6 +405,13 @@ DESIGN DECISIONS (from the 2026-10-26 question rounds):
   suggestion). Refitting moved the young threshold from 0.33 to 0.32. On
   simulated 60-note imports, suggestions after starter folders went from 10
   of 54 right to 4 of 5.
+- Changed 2026-10-30, at my request (from a 2,2,2 review, picked: "undo" and "a
+  later stale default"): ⌘Z and ⌘⇧Z undo and redo moves, Archive, Move to
+  Trash, Move All Suggested and making a starter folder, each as one step.
+  Deleting a folder undoes too, so earlier steps never lose a folder they
+  need. While a text field has the keyboard, ⌘Z is about its text. Stale
+  starts at 60 days: of my 25 Apple Stickies on that date, 14 days would flag
+  22 and 60 days flags 12. Which 12 I'd actually archive is still untested.
 - Delivery: local build for macOS 26 or later, signed for this Mac only, in
   /Applications. Code goes to a public GitHub repo, amalmehta/OrganizedStickies.
 - Measured on my real Apple Stickies (word counts only, no text read): 25 notes,
@@ -418,7 +425,7 @@ DEFINITIONS AND DEFERRED:
   follows the title. Its color comes from its folder, so color carries meaning.
 - Untouched: the file's modification date. An imported note keeps the date it
   had in Apple Stickies.
-- Stale: untouched for at least N days (N = 14 by default, adjustable from 3
+- Stale: untouched for at least N days (N = 60 by default, adjustable from 3
   to 90 in Settings) and not already in Archive.
 - Smart sort suggestion: for each Inbox note, score every user folder by word
   overlap (TF-IDF cosine; TF-IDF weights words that are common in this note
@@ -449,7 +456,13 @@ DEFINITIONS AND DEFERRED:
   "No clear match" (a ? mark with the reason on hover), stale clocks out of the
   sidebar, spring animations everywhere, expanding a card into a roomy editor,
   folders that fade into each other and keep their scroll position, saving
-  the sorter's data between launches, and a trackpad tap on drop.
+  the sorter's data between launches, and a trackpad tap on drop. From the
+  2026-10-29 and 2026-10-30 lists, not picked: quick capture from a global
+  hotkey, a menu bar glance at one folder, "Not there" teaching the sorter,
+  dismissals remembered across launches, search by words in any order, and
+  removing the Careful / Eager picker. Undo doesn't yet cover text after its
+  editor closes, renaming or recoloring a folder, new notes, or import, and
+  its history ends when the app quits.
 
 OPEN QUESTIONS / ASSUMPTIONS:
 
@@ -527,4 +540,5 @@ CHANGELOG:
 - 2026-10-29 — v1.2: starter folders for an Inbox with no folders yet (fitted and evaluated on sample notes); old Inbox notes offer Archive instead of "No clear match"
 - 2026-10-29 — v1.2.1: folders with fewer than 7 notes need a closer match (fitted on simulated imports from tuning notes, checked on held-out ones)
 - 2026-10-29 — v1.2.2: notes that came with a starter folder don't count toward the 7, so big starter folders stay young too; young threshold refitted to 0.32
+- 2026-10-30 — v1.3: undo and redo for moves, Archive, Move to Trash, Move All Suggested, making a starter folder and deleting a folder; stale default raised from 14 to 60 days
 - 2026-10-30 — the app's version number now says 1.2.2 (it had stayed at 1.0); project.yml sets it, and Info.plist reads it from there

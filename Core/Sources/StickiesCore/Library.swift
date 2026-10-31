@@ -1,5 +1,17 @@
 import Foundation
 
+/// One change to the library that undo or redo can make.
+public enum LibraryChange: Sendable, Equatable {
+    /// Put a note in a folder at a position, with the file name and starter
+    /// mark it had there.
+    case place(Note.ID, folder: Folder.ID, position: Int, suggested: Bool, fileName: String)
+    /// Bring back a trashed note. `folderName` is where it was when trashed.
+    case restore(Note, folder: Folder.ID, folderName: String, position: Int, suggested: Bool)
+    case trash(Note.ID)
+    case removeFolder(Folder.ID)
+    case restoreFolder(Folder, position: Int)
+}
+
 /// The in-memory truth: folders in order, notes in order. Every edit returns
 /// the `DiskOp`s that make the disk match, so the UI never waits on I/O and
 /// the logic is testable without touching a disk.
@@ -130,8 +142,9 @@ public struct Library: Sendable, Equatable {
         return [.trashNote(folder: folders[l.folder].name, file: note.fileName), .saveIndex(index)]
     }
 
-    /// Move a note to another folder, at the top unless `at` is given.
-    public mutating func move(_ id: Note.ID, to folderID: Folder.ID, at position: Int? = nil) -> [DiskOp] {
+    /// Move a note to another folder, at the top unless `at` is given. `preferring`
+    /// is a file name to use if it's free and still fits the note (undo).
+    public mutating func move(_ id: Note.ID, to folderID: Folder.ID, at position: Int? = nil, preferring: String? = nil) -> [DiskOp] {
         guard let l = location(of: id), let target = folderIndex(folderID) else { return [] }
         if l.folder == target {
             if let position { return reorder(id, to: position) }
@@ -144,9 +157,7 @@ public struct Library: Sendable, Equatable {
         folders[l.folder].suggestedNotes.remove(id)
         let from = folders[l.folder].name, to = folders[target].name
         if note.isOnDisk {
-            let newName = NoteNaming.uniqueFileName(
-                base: NoteNaming.base(ofFileName: note.fileName),
-                taken: Set(folders[target].notes.map(\.fileName)))
+            let newName = fileName(for: note, in: target, preferring: preferring)
             ops.append(.move(from: from, to: to, file: note.fileName, newFile: newName))
             note.fileName = newName
             if note.dirty {
@@ -240,6 +251,74 @@ public struct Library: Sendable, Equatable {
         return [.saveIndex(index)]
     }
 
+    // MARK: Undo
+
+    /// What puts a note back where it is now. Take it before moving the note.
+    public func placement(of id: Note.ID) -> LibraryChange? {
+        guard let l = location(of: id) else { return nil }
+        let f = folders[l.folder], note = f.notes[l.note]
+        return .place(id, folder: f.id, position: l.note, suggested: f.suggestedNotes.contains(id), fileName: note.fileName)
+    }
+
+    /// What brings a note back after it's trashed. Nil for a note that was
+    /// never saved, since there's nothing to bring back.
+    public func restoration(of id: Note.ID) -> LibraryChange? {
+        guard let l = location(of: id) else { return nil }
+        let f = folders[l.folder], note = f.notes[l.note]
+        guard note.isOnDisk else { return nil }
+        return .restore(note, folder: f.id, folderName: f.name, position: l.note, suggested: f.suggestedNotes.contains(id))
+    }
+
+    /// What brings a folder back after it's deleted, empty: its notes return
+    /// by their own placements.
+    public func restoration(ofFolder id: Folder.ID) -> LibraryChange? {
+        guard let fi = folderIndex(id), folders[fi].kind == .user else { return nil }
+        let f = folders[fi]
+        return .restoreFolder(Folder(id: f.id, name: f.name, color: f.color), position: fi)
+    }
+
+    /// Make one change. Returns the change that reverses it, so undo and redo
+    /// are the same operation, or nil if what it needs is gone (a note or
+    /// folder removed in Finder, say). Edits made since, like text, are kept.
+    public mutating func apply(_ change: LibraryChange) -> (reverse: LibraryChange, ops: [DiskOp])? {
+        switch change {
+        case let .place(id, folder, position, suggested, fileName):
+            guard let reverse = placement(of: id), let fi = folderIndex(folder) else { return nil }
+            var ops = move(id, to: folder, at: position, preferring: fileName)
+            if suggested { folders[fi].suggestedNotes.insert(id) } else { folders[fi].suggestedNotes.remove(id) }
+            ops.append(.saveIndex(index))
+            return (reverse, ops)
+        case let .restore(saved, folder, folderName, position, suggested):
+            guard location(of: saved.id) == nil else { return nil }
+            // Its folder is gone: Inbox, so the note is never lost.
+            let home = folderIndex(folder)
+            let fi = home ?? folderIndex(inbox.id)!
+            var note = saved
+            note.fileName = fileName(for: saved, in: fi, preferring: saved.fileName)
+            folders[fi].notes.insert(note, at: min(max(position, 0), folders[fi].notes.count))
+            if suggested && home != nil { folders[fi].suggestedNotes.insert(note.id) }
+            return (.trash(note.id), [
+                .restoreNote(trashedFolder: folderName, trashedFile: saved.fileName, folder: folders[fi].name, file: note.fileName, text: saved.text, modified: saved.modified),
+                .saveIndex(index),
+            ])
+        case let .trash(id):
+            guard location(of: id) != nil else { return nil }
+            var ops = persist(id)
+            guard let reverse = restoration(of: id) else { return nil }
+            ops += trash(id)
+            return (reverse, ops)
+        case let .removeFolder(id):
+            guard let reverse = restoration(ofFolder: id) else { return nil }
+            return (reverse, deleteFolder(id))
+        case let .restoreFolder(folder, position):
+            guard folderIndex(folder.id) == nil else { return nil }
+            var restored = folder
+            restored.name = uniqueFolderName(folder.name)
+            folders.insert(restored, at: min(max(position, 1), folders.count - 1))
+            return (.removeFolder(folder.id), [.makeFolder(restored.name), .saveIndex(index)])
+        }
+    }
+
     // MARK: Import
 
     /// Add copies of Apple Stickies notes to the top of Inbox, skipping ones
@@ -289,6 +368,17 @@ public struct Library: Sendable, Equatable {
     }
 
     // MARK: Helpers
+
+    /// A free file name for a note arriving in a folder: `preferring` if it's
+    /// free and still fits the note, else the note's own base made unique.
+    private func fileName(for note: Note, in folder: Int, preferring: String?) -> String {
+        let taken = Set(folders[folder].notes.map(\.fileName))
+        if let preferring, NoteNaming.base(ofFileName: preferring) == NoteNaming.base(ofFileName: note.fileName),
+           !taken.contains(where: { $0.lowercased() == preferring.lowercased() }) {
+            return preferring
+        }
+        return NoteNaming.uniqueFileName(base: NoteNaming.base(ofFileName: note.fileName), taken: taken)
+    }
 
     private func takenNames(in folder: Int, except id: Note.ID) -> Set<String> {
         Set(folders[folder].notes.filter { $0.id != id && $0.isOnDisk }.map(\.fileName))

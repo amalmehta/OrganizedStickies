@@ -77,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let controller = NSHostingController(rootView: BoardRoot(board: board))
         controller.sceneBridgingOptions = [.toolbars, .title]
-        let w = NSWindow(contentViewController: controller)
+        let w = BoardWindow(contentViewController: controller)
         w.title = board.isDemo ? "Organized Stickies (Demo)" : "Organized Stickies"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         w.toolbarStyle = .unified
@@ -123,6 +123,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillResignActive(_ notification: Notification) {
         MainActor.assumeIsolated { AppDelegate.board?.flush() }
+    }
+}
+
+/// The board's window answers Edit › Undo and Redo for moves, trash and folders.
+/// While a text field has the keyboard, it answers them first, for its text.
+final class BoardWindow: NSWindow {
+    /// Only text views ask for this. Always the text manager, because SwiftUI's
+    /// text view keeps what it was given first, whatever has the keyboard later.
+    override var undoManager: UndoManager? { AppDelegate.board?.textUndo }
+
+    @objc func undo(_ sender: Any?) { activeUndo?.undo() }
+    @objc func redo(_ sender: Any?) { activeUndo?.redo() }
+
+    /// What ⌘Z is about: the text that has the keyboard, else the board. Nothing
+    /// while a note is open but its editor doesn't have the keyboard yet, so ⌘Z
+    /// there can't move anything.
+    private var activeUndo: UndoManager? {
+        if let text = firstResponder as? NSTextView { return text.undoManager }
+        guard let board = AppDelegate.board else { return nil }
+        return board.editingNoteID == nil ? board.boardUndo : nil
+    }
+
+    override func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(undo(_:)):
+            item.title = activeUndo?.undoMenuItemTitle ?? "Undo"
+            return activeUndo?.canUndo ?? false
+        case #selector(redo(_:)):
+            item.title = activeUndo?.redoMenuItemTitle ?? "Redo"
+            return activeUndo?.canRedo ?? false
+        default:
+            return super.validateMenuItem(item)
+        }
     }
 }
 

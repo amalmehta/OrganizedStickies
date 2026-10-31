@@ -10,13 +10,20 @@ public actor NoteDisk {
     }
 
     public let root: URL
-    private let trash: @Sendable (URL) throws -> Void
+    private let trash: @Sendable (URL) throws -> URL?
+    /// Where trashed notes went this launch, so undo can put the same file back.
+    private var trashedNotes: [String: URL] = [:]
     private let log = Logger(subsystem: "com.amalmehta.OrganizedStickies", category: "disk")
 
-    /// `trash` defaults to the Finder Trash; tests pass something local.
-    public init(root: URL, trash: (@Sendable (URL) throws -> Void)? = nil) {
+    /// `trash` defaults to the Finder Trash and returns where the item went;
+    /// tests pass something local.
+    public init(root: URL, trash: (@Sendable (URL) throws -> URL?)? = nil) {
         self.root = root
-        self.trash = trash ?? { url in try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+        self.trash = trash ?? { url in
+            var result: NSURL?
+            try FileManager.default.trashItem(at: url, resultingItemURL: &result)
+            return result as URL?
+        }
     }
 
     /// Returns the ops that failed; the rest still ran.
@@ -53,14 +60,24 @@ public actor NoteDisk {
             try moveItem(url(from, file), url(to, newFile))
         case let .trashNote(folder, file):
             let u = url(folder, file)
-            if fm.fileExists(atPath: u.path) { try trash(u) }
+            if fm.fileExists(atPath: u.path) { trashedNotes["\(folder)/\(file)"] = try trash(u) }
+        case let .restoreNote(trashedFolder, trashedFile, folder, file, text, modified):
+            try fm.createDirectory(at: url(folder), withIntermediateDirectories: true)
+            let target = url(folder, file)
+            if let from = trashedNotes.removeValue(forKey: "\(trashedFolder)/\(trashedFile)"), fm.fileExists(atPath: from.path) {
+                try moveItem(from, target)
+            } else {
+                // The Trash was emptied, or it went there before this launch.
+                try Data(text.utf8).write(to: target, options: .atomic)
+                try fm.setAttributes([.modificationDate: modified], ofItemAtPath: target.path)
+            }
         case let .makeFolder(name):
             try fm.createDirectory(at: url(name), withIntermediateDirectories: true)
         case let .renameFolder(from, to):
             try moveItem(url(from), url(to))
         case let .trashFolder(name):
             let u = url(name)
-            if fm.fileExists(atPath: u.path) { try trash(u) }
+            if fm.fileExists(atPath: u.path) { _ = try trash(u) }
         case let .saveIndex(index):
             let enc = JSONEncoder()
             enc.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -29,6 +29,7 @@ open "/Applications/Organized Stickies.app" --args -demo -unsorted
 | Write a note | **⌘N**, or the pencil button. New notes go to the folder you're looking at (Inbox from Archive). The first line is the title. |
 | Stop editing | **Esc**, or click empty board space. A blank note disappears by itself. |
 | Edit a note | Click it, or select it with the arrow keys and press **Return**. |
+| Undo | **⌘Z** takes back the last move, Archive, Move to Trash, Move All Suggested, new starter folder or deleted folder, and **⌘⇧Z** does it again. While you're typing, **⌘Z** is about your text. Undo history ends when the app quits. |
 | Switch folders | Click in the sidebar, or **⌘1**…**⌘9**. **Tab** moves from the sidebar into the board. |
 | File a note | Drag it onto a folder in the sidebar, or **⌥⌘1**…**⌥⌘9** (Note › Move To). |
 | Reorder | Drag a card onto another card. |
@@ -63,7 +64,8 @@ Things tests can't judge. Check these after any visible change:
 - [ ] **Smoothness**: scrolling Inbox with 40+ cards holds the frame rate. Moving a card animates without a jump. Switching folders has no flicker.
 - [ ] **First open**: the welcome screen says what to do, and Import shows a clear result line.
 - [ ] **Real notes**: after importing your Apple Stickies, are the suggestions you see right? Count wrong ones. If more than about 1 in 10 are wrong, switch Settings › Sorting to Careful and tell me which ones.
-- [ ] **Stale**: does 14 days flag notes you'd actually archive? Old Inbox notes without a folder suggestion show **Archive** too.
+- [ ] **Undo**: the Edit menu names what it will undo ("Undo Move", "Undo Move All Suggested"). Undoing a Move to Trash brings the note back and leaves no copy in the Trash.
+- [ ] **Stale**: does 60 days flag notes you'd actually archive? Old Inbox notes without a folder suggestion show **Archive** too.
 - [ ] **Starter folders**: right after importing (no folders yet), do the groups make sense, and do their draft names need much renaming? Count groups with a note that doesn't belong. After making them, expect few suggestions until you've filed 7 notes into a folder yourself (it says "needs a closer match"); are the ones you do get right?
 - [ ] **Dark mode**: cards, chips and the sidebar stay quiet and readable.
 - [ ] **Glass**: drag a colorful window behind the app: its colors show softly through the board, the toolbar strip and the sidebar, and cards still read easily. With System Settings › Accessibility › Display › Reduce transparency on, the board is solid paper.

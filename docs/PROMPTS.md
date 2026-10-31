@@ -54,3 +54,9 @@
 
 1. "Update the app's version number to 1.2.2, reinstall, and commit and push it."
    → Set MARKETING_VERSION to 1.2.2 in project.yml and pointed Info.plist's version keys at the build settings, because XcodeGen had been writing its default 1.0 there. Reinstalled and committed.
+2. "2,2,2"
+   → Listed 2 cuts, 2 adds and 2 improvements from the app, code and spec, and built nothing. Cuts: the Careful / Eager picker, and the "No clear match" text on cards. Adds: undo, and quick capture. Improvements: a later stale default, and search by words in any order.
+3. "Build add #1 (undo) and improve #1 (a later stale default)."
+   → Built undo as changes that return their own reverse, tested on a real temp folder. The first try used the window delegate, which Edit › Undo never reached, so undo now lives on a small window subclass, with typing undo kept separate. Deleting a folder undoes too, so earlier steps never lose a folder they need. Raised the stale default to 60 days after recounting: 14 days flags 22 of the 25 Apple Stickies and 60 flags 12, not the 21 and about 10 said in the list. The full UI run then caught ⌘Z doing nothing while typing, with typing steps landing on the board's history: SwiftUI's editor keeps the undo manager it was given first. Fixed that and added a test for the search field.
+4. "Commit and push v1.3."
+   → Committed and pushed.

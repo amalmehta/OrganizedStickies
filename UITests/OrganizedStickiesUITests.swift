@@ -103,7 +103,8 @@ final class OrganizedStickiesUITests: XCTestCase {
     /// (here there are no folders at all, so every note gets "No clear match").
     func testOldInboxNoteOffersArchive() {
         app.terminate()
-        app.launchArguments = ["-demo", "-unsorted"]
+        // Cast iron is 15 days old, under the default, so ask for a shorter time.
+        app.launchArguments = ["-demo", "-unsorted", "-staleDays", "14"]
         app.launch()
         let card = note("Cast iron")
         XCTAssertTrue(app.buttons["makeStarterFolder"].firstMatch.waitForExistence(timeout: 30))
@@ -116,6 +117,112 @@ final class OrganizedStickiesUITests: XCTestCase {
             RunLoop.current.run(until: .now.addingTimeInterval(0.5))
         }
         XCTAssertTrue(card.label.contains("Archive offered"), card.label)
+    }
+
+    /// ⌘Z brings a moved note back, ⌘⇧Z sends it again, and the Edit menu says what it'll undo.
+    func testUndoAndRedoAMove() {
+        folder("Cooking").click()
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+        app.typeKey(.rightArrow, modifierFlags: [])
+        app.typeKey("1", modifierFlags: [.command, .option])
+        XCTAssertTrue(note("Miso cod").waitForNonExistence(timeout: 5))
+        app.menuBars.menuBarItems["Edit"].click()
+        let undoItem = app.menuBars.menuItems["undo:"]
+        XCTAssertTrue(undoItem.waitForExistence(timeout: 5))
+        XCTAssertTrue(undoItem.isEnabled)
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+        app.typeKey("z", modifierFlags: [.command, .shift])
+        // Redo shows where it went.
+        XCTAssertTrue(app.staticTexts["Inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+        folder("Cooking").click()
+        XCTAssertTrue(note("Miso cod").waitForNonExistence(timeout: 5))
+    }
+
+    /// A trashed note comes back with its text. (Demo notes only, and the file
+    /// comes back out of the Trash.)
+    func testUndoMoveToTrash() {
+        folder("Cooking").click()
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+        app.typeKey(.rightArrow, modifierFlags: [])
+        app.typeKey(.delete, modifierFlags: .command)
+        XCTAssertTrue(note("Miso cod").waitForNonExistence(timeout: 5))
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+    }
+
+    /// One ⌘Z takes back a whole starter folder: the folder goes, and its tile returns.
+    func testUndoMakingAStarterFolder() {
+        app.terminate()
+        app.launchArguments = ["-demo", "-unsorted"]
+        app.launch()
+        let make = app.buttons.matching(identifier: "makeStarterFolder").firstMatch
+        XCTAssertTrue(make.waitForExistence(timeout: 30))
+        let tiles = app.buttons.matching(identifier: "makeStarterFolder").count
+        let name = app.textFields.matching(identifier: "starterName").firstMatch
+        name.click()
+        name.typeKey("a", modifierFlags: .command)
+        name.typeText("Kitchen")
+        make.click()
+        XCTAssertTrue(folder("Kitchen").waitForExistence(timeout: 5))
+        // Let the notes move, then click the board so the name field lets go of the keyboard.
+        folder("Inbox").click()
+        RunLoop.current.run(until: .now.addingTimeInterval(1))
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(folder("Kitchen").waitForNonExistence(timeout: 5))
+        let deadline = Date.now.addingTimeInterval(10)
+        while app.buttons.matching(identifier: "makeStarterFolder").count < tiles && Date.now < deadline {
+            RunLoop.current.run(until: .now.addingTimeInterval(0.5))
+        }
+        XCTAssertEqual(app.buttons.matching(identifier: "makeStarterFolder").count, tiles)
+    }
+
+    /// While typing, ⌘Z is about the text and leaves the board alone.
+    func testUndoWhileTypingOnlyTouchesTheText() {
+        folder("Cooking").click()
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+        app.typeKey(.rightArrow, modifierFlags: [])
+        app.typeKey("1", modifierFlags: [.command, .option])
+        XCTAssertTrue(note("Miso cod").waitForNonExistence(timeout: 5))
+        app.buttons["newNoteButton"].click()
+        let editor = app.textViews["noteEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.typeText("Racket restring")
+        editor.typeKey("z", modifierFlags: .command)
+        // The note you moved stayed moved, and the editor is still open.
+        RunLoop.current.run(until: .now.addingTimeInterval(1))
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertFalse(note("Miso cod").exists)
+        XCTAssertNotEqual(editor.value as? String, "Racket restring", "⌘Z undid the typing")
+        // Done typing: ⌘Z is about the board again.
+        editor.typeText("Racket restring")
+        editor.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(note("Racket restring").waitForExistence(timeout: 5))
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+    }
+
+    /// In the search field, ⌘Z is about the search text and leaves the board alone.
+    func testUndoInSearchOnlyTouchesTheText() {
+        folder("Cooking").click()
+        XCTAssertTrue(note("Miso cod").waitForExistence(timeout: 5))
+        app.typeKey(.rightArrow, modifierFlags: [])
+        app.typeKey("1", modifierFlags: [.command, .option])
+        XCTAssertTrue(note("Miso cod").waitForNonExistence(timeout: 5))
+        let search = app.searchFields.firstMatch
+        search.click()
+        search.typeText("zzzqqq")
+        search.typeKey("z", modifierFlags: .command)
+        RunLoop.current.run(until: .now.addingTimeInterval(1))
+        XCTAssertNotEqual(search.value as? String, "zzzqqq", "⌘Z undid the search text")
+        search.typeKey("a", modifierFlags: .command)
+        search.typeKey(.delete, modifierFlags: [])
+        // The note you moved stayed moved.
+        folder("Cooking").click()
+        RunLoop.current.run(until: .now.addingTimeInterval(1))
+        XCTAssertFalse(note("Miso cod").exists)
     }
 
     /// Type, quit at once (before the 0.5 s save delay), relaunch: the text is there.

@@ -2,7 +2,7 @@ import Foundation
 
 /// "Stale" = untouched for at least `days` days and not already archived.
 public enum Staleness {
-    public static let defaultDays = 14
+    public static let defaultDays = 60
     public static let allowedDays = 3...90
 
     /// Whole days between the last edit and now, counted by calendar date.

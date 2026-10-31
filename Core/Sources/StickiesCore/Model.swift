@@ -87,6 +87,8 @@ public enum DiskOp: Sendable, Equatable {
     case rename(folder: String, from: String, to: String)
     case move(from: String, to: String, file: String, newFile: String)
     case trashNote(folder: String, file: String)
+    /// Bring a trashed note back: the same file if it's still in the Trash, else a new one from `text`.
+    case restoreNote(trashedFolder: String, trashedFile: String, folder: String, file: String, text: String, modified: Date)
     case makeFolder(String)
     case renameFolder(from: String, to: String)
     case trashFolder(String)

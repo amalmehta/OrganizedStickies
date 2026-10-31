@@ -6,7 +6,7 @@ OrganizedStickies/
 ├── README.md                   What it is, a screenshot, links
 ├── project.yml                 XcodeGen project (the .xcodeproj is generated, not committed)
 ├── App/                        The Mac app (SwiftUI + one AppKit window)
-│   ├── OrganizedStickiesApp.swift   Entry point, board window, menu commands, quit handling
+│   ├── OrganizedStickiesApp.swift   Entry point, board window (and its undo), menu commands, quit handling
 │   ├── Board.swift                  App state: wraps Library, debounced saves, serial disk queue, sorting
 │   ├── ContentView.swift            Sidebar + board split view, search, error banner
 │   ├── SidebarView.swift            Folders: counts, stale marker, drop targets, rename/color/delete
@@ -20,9 +20,9 @@ OrganizedStickies/
 ├── Core/                       StickiesCore: all logic, no UI (Swift package)
 │   ├── Sources/StickiesCore/
 │   │   ├── Model.swift              Note, Folder, FolderColor, DiskOp, LibraryIndex
-│   │   ├── Library.swift            In-memory truth; every edit returns the DiskOps to apply
+│   │   ├── Library.swift            In-memory truth; every edit returns the DiskOps to apply; undo changes and their reverses
 │   │   ├── LibraryLoader.swift      Reads ~/Documents/Organized Stickies into a Library
-│   │   ├── NoteDisk.swift           Actor that applies DiskOps in order (write, rename, move, trash)
+│   │   ├── NoteDisk.swift           Actor that applies DiskOps in order (write, rename, move, trash, bring back from the Trash)
 │   │   ├── NoteNaming.swift         Titles and safe, readable file names
 │   │   ├── ColumnPacking.swift      Which column each card goes in (shortest first, kept while you work)
 │   │   ├── Sorter.swift             Folder suggestions: word overlap + on-device meaning vectors, streamed in batches

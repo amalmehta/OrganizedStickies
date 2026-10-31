@@ -10,7 +10,10 @@ final class Board {
     private(set) var loaded = false
     var selectedFolderID: Folder.ID?
     var selectedNoteID: Note.ID?
-    var editingNoteID: Note.ID?
+    var editingNoteID: Note.ID? {
+        // Typing undo belongs to the editor that's closing.
+        didSet { if editingNoteID != oldValue { textUndo.removeAllActions() } }
+    }
     var searchText = ""
     private(set) var suggestions: [Note.ID: SortOutcome] = [:]
     private(set) var isSorting = false
@@ -30,6 +33,12 @@ final class Board {
     /// Where cards and folder rows are on screen, for the flights. Not
     /// observed: it changes on every scroll and nothing needs to redraw.
     let frames = FrameBook()
+
+    /// ⌘Z for the board (moves, trash, folders), kept apart from ⌘Z while
+    /// typing, so undoing text never moves a note. The window picks one by
+    /// what has the keyboard.
+    let boardUndo = UndoManager()
+    let textUndo = UndoManager()
 
     let root: URL
     let isDemo: Bool
@@ -52,6 +61,7 @@ final class Board {
         self.isDemo = isDemo
         let disk = NoteDisk(root: root)
         self.disk = disk
+        boardUndo.levelsOfUndo = 100
         let (stream, continuation) = AsyncStream<Job>.makeStream()
         jobs = continuation
         // Load the language data now, while the board appears, so the first
@@ -219,16 +229,21 @@ final class Board {
         saveTasks[id]?.cancel()
         let neighbor = neighbor(of: id)
         apply(library.persist(id))
+        let change = library.restoration(of: id)
         apply(library.trash(id))
+        if let change { register(change, named: "Move to Trash") }
         selectedNoteID = neighbor
     }
 
-    func move(_ id: Note.ID, to folderID: Folder.ID, at position: Int? = nil) {
+    func move(_ id: Note.ID, to folderID: Folder.ID, at position: Int? = nil, undoName: String = "Move") {
         if editingNoteID == id { endEditing() }
         saveTasks[id]?.cancel()
         saveTasks[id] = nil
         let neighbor = library.folderOf(note: id)?.id == folderID ? id : neighbor(of: id)
-        apply(library.move(id, to: folderID, at: position))
+        let change = library.placement(of: id)
+        let ops = library.move(id, to: folderID, at: position)
+        apply(ops)
+        if let change, !ops.isEmpty { register(change, named: undoName) }
         suggestions[id] = nil
         dismissedStale.remove(id)
         if selectedNoteID == id { selectedNoteID = neighbor }
@@ -240,7 +255,7 @@ final class Board {
         move(id, to: f.id)
     }
 
-    func archive(_ id: Note.ID) { move(id, to: library.archive.id) }
+    func archive(_ id: Note.ID) { move(id, to: library.archive.id, undoName: "Archive") }
 
     /// Drop `id` where `target` is, within the same folder.
     func reorder(_ id: Note.ID, before target: Note.ID) {
@@ -248,7 +263,10 @@ final class Board {
         if s.folder != t.folder {
             move(id, to: library.folders[t.folder].id, at: t.note)
         } else {
-            apply(library.reorder(id, to: t.note))
+            let change = library.placement(of: id)
+            let ops = library.reorder(id, to: t.note)
+            apply(ops)
+            if let change, !ops.isEmpty { register(change, named: "Move") }
         }
     }
 
@@ -302,12 +320,79 @@ final class Board {
     func deleteFolder(_ id: Folder.ID) {
         endEditing()
         flush()
-        apply(library.deleteFolder(id))
+        guard let folder = library.folder(id), let restore = library.restoration(ofFolder: id) else { return }
+        undoGroup(named: "Delete Folder") {
+            // Last note first, so undo brings them back top to bottom after the folder.
+            for note in folder.notes.reversed() {
+                if let change = library.placement(of: note.id) { register(change, named: "Delete Folder") }
+            }
+            register(restore, named: "Delete Folder")
+            apply(library.deleteFolder(id))
+        }
         if selectedFolderID == id { selectedFolderID = library.inbox.id }
         scheduleSort()
     }
 
     func moveFolder(_ id: Folder.ID, to position: Int) { apply(library.moveFolder(id, to: position)) }
+
+    // MARK: Undo
+
+    private func register(_ change: LibraryChange, named name: String) {
+        boardUndo.registerUndo(withTarget: self) { $0.perform(change) }
+        boardUndo.setActionName(name)
+    }
+
+    /// Everything `body` does comes back with one ⌘Z.
+    private func undoGroup(named name: String, _ body: () -> Void) {
+        boardUndo.beginUndoGrouping()
+        body()
+        boardUndo.setActionName(name)
+        boardUndo.endUndoGrouping()
+    }
+
+    /// Runs one undo or redo step, leaves its reverse for the other direction,
+    /// and shows you the note it brought back.
+    private func perform(_ change: LibraryChange) {
+        endEditing()
+        var shown: (note: Note.ID, folder: Folder.ID)?
+        var next: Note.ID?
+        switch change {
+        case let .place(id, folder, _, _, _):
+            shown = (id, folder)
+            saveTasks[id]?.cancel()
+            saveTasks[id] = nil
+            suggestions[id] = nil
+        case let .restore(note, folder, _, _, _):
+            shown = (note.id, library.folder(folder) == nil ? library.inbox.id : folder)
+        case let .trash(id):
+            saveTasks[id]?.cancel()
+            saveTasks[id] = nil
+            if selectedNoteID == id { next = neighbor(of: id) }
+        case .removeFolder, .restoreFolder:
+            break
+        }
+        guard let (reverse, ops) = library.apply(change) else {
+            report("Couldn't undo that: the note or folder is no longer here.")
+            return
+        }
+        apply(ops)
+        boardUndo.registerUndo(withTarget: self) { $0.perform(reverse) }
+        if let shown {
+            if !isSearching { selectedFolderID = shown.folder }
+            selectedNoteID = shown.note
+        } else if case .trash = change {
+            selectedNoteID = next ?? selectedNoteID
+        }
+        if selectedFolderID.flatMap(library.folder) == nil { selectedFolderID = library.inbox.id }
+        scheduleSort()
+    }
+
+    /// One undo step for a starter folder's tile: it goes when the folder is
+    /// made and comes back with undo.
+    private func setStarter(_ id: StarterFolder.ID, dismissed: Bool) {
+        if dismissed { dismissedStarters.insert(id) } else { dismissedStarters.remove(id) }
+        boardUndo.registerUndo(withTarget: self) { $0.setStarter(id, dismissed: !dismissed) }
+    }
 
     // MARK: Sorting
 
@@ -370,7 +455,9 @@ final class Board {
     func acceptAllSuggestions() {
         let moves = suggestedMoves
         for (i, (id, name)) in moves.enumerated() { fly(id, to: name, delay: Double(min(i, 12)) * 0.03) }
-        for (id, name) in moves { move(id, toFolderNamed: name) }
+        undoGroup(named: "Move All Suggested") {
+            for (id, name) in moves { move(id, toFolderNamed: name) }
+        }
     }
 
     /// Sends a ghost of the card to its folder row, so you see where it went.
@@ -424,9 +511,13 @@ final class Board {
             guard let self else { return }
             for (i, note) in starter.noteIDs.enumerated() { fly(note, to: folderName, delay: Double(min(i, 12)) * 0.03) }
             var moved: [Note.ID] = []
-            for note in starter.noteIDs where library.folderOf(note: note)?.kind == .inbox {
-                move(note, to: folderID)
-                moved.append(note)
+            undoGroup(named: "Make Folder") {
+                setStarter(id, dismissed: true)
+                register(.removeFolder(folderID), named: "Make Folder")
+                for note in starter.noteIDs where library.folderOf(note: note)?.kind == .inbox {
+                    move(note, to: folderID)
+                    moved.append(note)
+                }
             }
             // They came with a suggestion, so they don't count as filed by
             // hand: the folder stays young until you file notes into it.

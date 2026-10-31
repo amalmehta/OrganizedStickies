@@ -45,7 +45,7 @@ private struct GeneralSettings: View {
                     LabeledContent("Suggest archiving after", value: "\(staleDays) days untouched")
                 }
                 .onChange(of: staleDays) { _, _ in board.dismissedStale = [] }
-                Text("A note nobody has edited for this long gets an Archive button. It's never moved for you. 14 days is a starting guess: raise it if good notes get flagged, lower it if old ones pile up.")
+                Text("A note nobody has edited for this long gets an Archive button. It's never moved for you. \(Staleness.defaultDays) days is a starting guess: raise it if good notes get flagged, lower it if old ones pile up.")
                     .font(.caption)
                     .foregroundStyle(Theme.quiet)
             }

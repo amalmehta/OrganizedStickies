@@ -15,7 +15,9 @@ struct TempRoot {
         try FileManager.default.createDirectory(at: trashDir, withIntermediateDirectories: true)
         let t = trashDir
         disk = NoteDisk(root: root) { url in
-            try FileManager.default.moveItem(at: url, to: t.appendingPathComponent(UUID().uuidString + url.lastPathComponent))
+            let target = t.appendingPathComponent(UUID().uuidString + url.lastPathComponent)
+            try FileManager.default.moveItem(at: url, to: target)
+            return target
         }
     }
 
