@@ -42,6 +42,14 @@ META-INSTRUCTIONS:
  widget's notes or my own answer. Keep the message around it to a sentence or
  two.>
 
+<Double-check every suggestion before giving it: fixes, next steps, designs,
+ recommended answers in the question widget, all of it. Test it against the
+ real thing (read the code, run it, look it up) rather than trusting memory or
+ your first idea. Confirm it isn't already done, that it solves the actual
+ problem, that it fits how the project works and that it won't break something
+ else, then look for the strongest reason it's wrong. Fix or drop what fails,
+ and say plainly what you couldn't verify rather than presenting it as checked.>
+
 <Explain so I learn the skill, not just the answer. Write explanations that
  anyone with a basic grounding in software, machine learning, neuroscience or
  psychology could follow: name the underlying idea in plain words, give an
@@ -55,31 +63,21 @@ META-INSTRUCTIONS:
 
 <Prefer doing over describing: run the code, write the files, test it.>
 
-<Always rebuild and reopen after every significant change, from the first
- working version (the MVP) on — anything I'd see or use differently (a feature,
- a fix, a UI or behavior change), not just at the end. Rebuild and reinstall
- it the project's own way, quit any older copy, then launch the build you just
- made, open the page in the browser, or run it on a real sample, so I'm looking
- at what was just built, before carrying on. Never leave me running a stale
- copy. Say in a line or two what changed and what to try.>
+<Always open the app after making a build, from the first working version
+ (the MVP) on: launch the build you just made (quit any older copy first), open
+ the page in the browser, or run it on a real sample, so I'm looking at what was
+ just built, before carrying on. Say in a line or two what to try.>
+
+<After every push to GitHub, open the latest result: launch the newest build
+ of what was just pushed (quit any older copy first) or open its page, so what
+ I see matches GitHub. With nothing to run, open the pull request or the repo
+ page on GitHub instead.>
 
 <Fully test on sample data before asking me to test on real data. Make a
  realistic sample set (fixtures, generated records, a demo mode) that covers
  the normal case, the edge cases and the ways it can fail; run every feature
  against it end to end and fix what breaks. Only then ask me to try it on real
  data, saying what the sample run covered and what only real data can show.>
-
-<Hold applications to a high quality bar before calling any change done; test
- it yourself rather than handing me a build to find the bugs in. Automate what
- can be: unit tests for the logic, and UI tests that drive the main flows end
- to end; run the whole suite after every change and keep it green. Then use the
- running app like a person would: click through every screen and flow touched,
- take screenshots and look at them, and try to break it (empty, huge and
- malformed input, rapid repeated clicks, no network, slow or failing services,
- quitting mid-task, relaunching). Check light and dark mode, small and large
- windows or phone sizes, keyboard-only use, VoiceOver labels and larger text.
- Fix what you find and re-run the checks. Report what was tested, what passed,
- and what wasn't covered.>
 
 <Publish production apps to GitHub. Once an app is ready for real users,
  nothing about it should live only on this Mac: commit everything, push every
@@ -129,10 +127,8 @@ META-INSTRUCTIONS:
  accents used on purpose, and dark mode checked on every component. Give every
  screen something to look at and a next step: real or sample content rather
  than blank space, empty states with a picture or example and a clear first
- action, icons beside labels, and small touches of personality. Don't make it
- cheesy: no gimmicky copy, forced jokes, exclamation marks, emoji confetti,
- stock-photo cheer or over-the-top celebration; personality stays quiet and
- earned. Generous spacing is fine; large dead areas and screens of bare text aren't. When the visuals are
+ action, icons beside labels, and small touches of personality. Generous spacing
+ is fine; large dead areas and screens of bare text aren't. When the visuals are
  open-ended, offer two or three mockups to pick from. Finish with a manual review
  checklist for what tests can't check: feel, hardware, live services.>
 
@@ -146,6 +142,28 @@ META-INSTRUCTIONS:
  lists lazy and scrolling fluid, and debounce work that follows typing.
  Profile the slowest interactions before calling it done, and add smoothness
  to the manual review checklist.>
+
+<Give every app an opening animation: a short, smooth reveal as it launches
+ (the icon or mark springing in, then the first screen easing into place),
+ about a second at most, once per launch, never blocking input, and a plain
+ fade when Reduce Motion is on.>
+
+<Put privacy, security and auth first in anything people use; this is a
+ priority, not polish, and it wins when it conflicts with convenience. Collect
+ only the data the app needs, keep it on the device when that works, and say
+ plainly in the app what's stored, where, and who can see it, with a way to
+ export and delete it. Nothing personal goes to logs, analytics, URLs or a third
+ party without asking. Encrypt in transit (HTTPS only) and at rest for anything
+ sensitive; keep secrets and tokens in the Keychain or the server's secret
+ store, never in code, the repo or plain files. Prefer proven sign-in (Sign in
+ with Apple, passkeys, magic links, OAuth) over home-made passwords; check
+ permissions on the server for every request, not only in the UI; expire
+ sessions and limit login attempts. Treat every input as untrusted (validate,
+ parameterize queries, escape output), ask for OS permissions only when needed
+ and say why, and keep dependencies few and current. Before calling it done,
+ walk through how someone could read, change or delete data that isn't theirs,
+ fix what you find, record the threat model in docs/SYSTEM-DESIGN.md, and add
+ privacy and security to the manual review checklist.>
 
 <Make equations easy to read. Typeset them properly (KaTeX or MathJax on the
  web, a native math renderer in apps, LaTeX in papers), never as raw LaTeX or
@@ -217,6 +235,14 @@ META-INSTRUCTIONS:
  outline in docs/SYSTEM-DESIGN.md before writing code, but build only what's
  in scope today.>
 
+<Go broad and deep first, then broad again (briefly), then prioritize depth,
+ in research, design and debugging alike. Start wide: map the options, prior
+ work and ways it could be done, and dig deep into the most promising few
+ until you know how each really works and where it breaks. Then widen once
+ more, briefly, for what that pass missed: an approach nobody named, a cheaper
+ path, a reason to change course. From then on, go deep: commit to the best
+ path and take it all the way down rather than spreading thin.>
+
 <Use sub-agents when they help. Hand them independent pieces that can run in
  parallel (separate projects, files or research questions), wide searches or
  heavy reading that would crowd the main conversation, and second opinions
@@ -274,8 +300,7 @@ META-INSTRUCTIONS:
    things, often, and sharing them.
  - What I'm after: tools that help people do their best work and let anyone do
    what they set out to, cheap and simple enough to reach the people who need
-   them most; that help folks get out of survival mode and lean into their
-   true, most enabled purpose.
+   them most.
  - Interests: how brains and machines learn; building fictional worlds and
    telling stories; mountains, skiing, ice climbing and travel; cooking; sport
    (soccer, running, tennis); hard sci-fi; small playful touches, like a hidden
@@ -314,6 +339,22 @@ META-INSTRUCTIONS:
  ~/.claude/CLAUDE.md and apply on their own — nothing to repeat here.>
 
 <Keep the changelog at the bottom current.>
+
+<Before building, list the lessons from this spec that apply and how you will act on each. At the end, note which you followed.>
+
+<When the project's kind is unclear, such as whether it is a tool or written content, ask before building.>
+
+<Before building, settle the deliverable's form, target platforms and minimum versions, packaging and signing, and hosting. When the brief conflicts with standing defaults, ask which wins.>
+
+<Before any paid API call, settle who pays, a spending cap, test versus live mode and where keys live, and keep a mock mode so the build runs without spending.>
+
+<When the look, concept or UI direction is open, show two or three concrete mockups or concepts to pick from before building. Never redesign existing UI without asking.>
+
+<Ask early for real sample inputs and working credentials, and check against the live API, model or tool as soon as one path works. When none exist, say so rather than inventing them silently.>
+
+<Before building, write down done criteria with concrete thresholds or formulas for every vague term, plus a list of what is explicitly deferred, and confirm both with me.>
+
+<Before building anything that judges, scores or generates content, decide with me whether an AI model or deterministic rules produce it, weighing cost, explainability and reproducibility, and which model is the default.>
 
 LEARNED ACROSS PROJECTS:
 
@@ -546,3 +587,4 @@ CHANGELOG:
 - 2026-10-30 — v1.3: undo and redo for moves, Archive, Move to Trash, Move All Suggested, making a starter folder and deleting a folder; stale default raised from 14 to 60 days
 - 2026-10-30 — the app's version number now says 1.2.2 (it had stayed at 1.0); project.yml sets it, and Info.plist reads it from there
 - 2026-10-31 — v1.3.1: the Inbox offers to import Apple Stickies, also in the File menu; import says what to do while macOS asks and when it refuses, with Ask Again; a blank Sticky comes across once it has words; the first-run screen no longer pushes the sidebar and board off screen
+- 2026-11-09 — updated the meta-instructions to the current meta doc
